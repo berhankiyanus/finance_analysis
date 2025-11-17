@@ -1,0 +1,6 @@
+# FastAPI'yi Başlatmak İçin Komutlar
+# Bu dosyadaki komutları terminal'e kopyalayıp yapıştırın
+
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+

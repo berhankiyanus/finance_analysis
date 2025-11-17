@@ -67,18 +67,36 @@ pip install streamlit plotly
 
 Bu durumda **doğrudan venv/bin/uvicorn kullanın:**
 
+**Yöntem 1: bash ile script çalıştır**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-./BASLAT_DIRECT.sh
+bash BASLAT_DIRECT.sh
 ```
 
-Veya manuel olarak:
+**Yöntem 2: Doğrudan komut (En Kolay - Önerilen)**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+**Yöntem 3: Python modülü olarak**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/python -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
 **Not:** `venv/bin/uvicorn` doğrudan çalıştırılabilir, activate gerekmez!
+
+### "./BASLAT_DIRECT.sh: Operation not permitted" Hatası
+
+macOS Gatekeeper bu script'i engelliyor olabilir. **Doğrudan komut kullanın:**
+
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Veya `BASLA_FASTAPI.txt` dosyasındaki komutları kopyalayıp yapıştırın.
 
 ### "command not found: uvicorn" Hatası
 

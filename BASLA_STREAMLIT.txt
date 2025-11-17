@@ -1,0 +1,6 @@
+# Streamlit'i Başlatmak İçin Komutlar
+# Bu dosyadaki komutları terminal'e kopyalayıp yapıştırın
+
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/streamlit run app.py
+
