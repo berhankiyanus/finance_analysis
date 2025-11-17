@@ -310,27 +310,41 @@ def find_arbitrage_opportunities(
         Arbitraj fırsatları analizi
     """
     
-    if not YFINANCE_AVAILABLE:
-        return {'error': 'yfinance yüklü değil'}
-    
     try:
+        # Projenin standart get_price_data fonksiyonunu kullan
+        try:
+            from .data_collection import get_price_data
+        except ImportError:
+            from src.data_collection import get_price_data
+        
         # Fiyat verilerini çek
-        stock1 = yf.Ticker(ticker1)
-        stock2 = yf.Ticker(ticker2)
+        df1 = get_price_data(ticker1, period=period)
+        df2 = get_price_data(ticker2, period=period)
         
-        hist1 = stock1.history(period=period)
-        hist2 = stock2.history(period=period)
+        if df1.empty or df2.empty:
+            return {'error': f'Fiyat verisi bulunamadı ({ticker1} veya {ticker2})'}
         
-        if hist1.empty or hist2.empty:
-            return {'error': 'Fiyat verisi bulunamadı'}
+        # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
+        if 'date' in df1.columns:
+            df1 = df1.set_index('date')
+            df1.index = pd.to_datetime(df1.index)
+        if 'date' in df2.columns:
+            df2 = df2.set_index('date')
+            df2.index = pd.to_datetime(df2.index)
+        
+        # Index'i DatetimeIndex'e çevir (eğer değilse)
+        if not isinstance(df1.index, pd.DatetimeIndex):
+            df1.index = pd.to_datetime(df1.index)
+        if not isinstance(df2.index, pd.DatetimeIndex):
+            df2.index = pd.to_datetime(df2.index)
         
         # Tarihleri hizala
-        common_dates = hist1.index.intersection(hist2.index)
+        common_dates = df1.index.intersection(df2.index)
         if len(common_dates) < 30:
-            return {'error': 'Yeterli ortak veri noktası yok'}
+            return {'error': f'Yeterli ortak veri noktası yok (sadece {len(common_dates)} gün)'}
         
-        prices1 = hist1.loc[common_dates, 'Close']
-        prices2 = hist2.loc[common_dates, 'Close']
+        prices1 = df1.loc[common_dates, 'close']
+        prices2 = df2.loc[common_dates, 'close']
         
         # Fiyat oranı (spread)
         ratio = prices1 / prices2
