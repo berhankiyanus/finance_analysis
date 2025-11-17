@@ -262,15 +262,33 @@ def analyze_sector_correlation(
         for ticker, series in price_data.items():
             # Timezone-aware datetime'ları UTC'ye çevir veya timezone'u kaldır
             dates = series.index
-            if hasattr(dates, 'tz') and dates.tz is not None:
-                # Timezone-aware ise UTC'ye çevir
-                dates = dates.tz_convert('UTC').tz_localize(None)
-            elif hasattr(dates[0], 'tzinfo') and dates[0].tzinfo is not None:
-                # Eğer datetime objeleri timezone-aware ise
-                dates = pd.to_datetime([d.replace(tzinfo=None) if hasattr(d, 'tzinfo') and d.tzinfo else d for d in dates])
             
-            all_dates.extend(dates.tolist())
-            print(f"   {ticker}: {len(series)} gün veri")
+            # Timezone kontrolü ve düzeltme
+            try:
+                if hasattr(dates, 'tz') and dates.tz is not None:
+                    # Timezone-aware DatetimeIndex ise UTC'ye çevir ve timezone'u kaldır
+                    dates = dates.tz_convert('UTC').tz_localize(None)
+                elif len(dates) > 0 and hasattr(dates[0], 'tzinfo') and dates[0].tzinfo is not None:
+                    # Eğer datetime objeleri timezone-aware ise
+                    dates = pd.to_datetime([d.replace(tzinfo=None) if hasattr(d, 'tzinfo') and d.tzinfo else d for d in dates], utc=False)
+                else:
+                    # Zaten timezone-naive ise, sadece emin ol
+                    dates = pd.to_datetime(dates, utc=False)
+            except Exception as e:
+                # Hata durumunda basit çözüm
+                print(f"   ⚠️  {ticker} için tarih dönüştürme hatası: {e}, basit dönüştürme deneniyor...")
+                try:
+                    dates = pd.to_datetime([str(d) for d in dates], utc=False)
+                except:
+                    # Son çare: sadece normalize et
+                    dates = pd.to_datetime(dates, errors='coerce')
+                    dates = dates.dropna()
+            
+            if len(dates) > 0:
+                all_dates.extend(dates.tolist())
+                print(f"   {ticker}: {len(series)} gün veri")
+            else:
+                print(f"   ⚠️  {ticker}: Tarih dönüştürme sonrası veri kalmadı")
         
         if len(all_dates) == 0:
             error_msg = "Hiç tarih bulunamadı"
