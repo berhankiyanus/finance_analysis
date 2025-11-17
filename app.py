@@ -144,6 +144,10 @@ if page == "🏠 Ana Sayfa - Analiz":
                         # Sonuçları göster
                         st.success("✅ Analiz tamamlandı!")
                         
+                        # API key kontrolü ve uyarı
+                        if results.get('news_count', 0) <= 3:
+                            st.warning("⚠️ **Dikkat:** Çok az haber bulundu. Bu, NEWS_API_KEY olmadığı için dummy (test) verisi kullanıldığı anlamına gelebilir. Gerçek haberler için NewsAPI key ekleyin. Detaylar için konsol çıktısına bakın.")
+                        
                         # Skorlar
                         col_score1, col_score2, col_score3 = st.columns(3)
                         

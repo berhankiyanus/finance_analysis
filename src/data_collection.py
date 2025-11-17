@@ -42,7 +42,12 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     
     # Eğer API key yoksa, dummy veri döndür (test amaçlı)
     if api_key is None:
-        print("⚠️  NEWS_API_KEY bulunamadı. Dummy veri kullanılıyor.")
+        print("⚠️  NEWS_API_KEY bulunamadı. Dummy (test) veri kullanılıyor.")
+        print("   📝 Gerçek haberler için:")
+        print("   1. https://newsapi.org/ adresinden ücretsiz API key alın")
+        print("   2. Proje kök dizininde .env dosyası oluşturun")
+        print("   3. .env dosyasına şunu ekleyin: NEWS_API_KEY=your_api_key_here")
+        print("   4. Uygulamayı yeniden başlatın")
         return _get_dummy_news(company_name, days_back)
     
     # NewsAPI'den haber çek
