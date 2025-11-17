@@ -178,32 +178,73 @@ def analyze_sector_correlation(
         Korelasyon matrisi
     """
     
-    if not YFINANCE_AVAILABLE:
-        return pd.DataFrame()
-    
     if len(sector_tickers) < 2:
         return pd.DataFrame()
     
     try:
+        # Projenin standart get_price_data fonksiyonunu kullan
+        try:
+            from .data_collection import get_price_data
+        except ImportError:
+            from src.data_collection import get_price_data
+        
         # Tüm hisselerin fiyat verilerini çek
         price_data = {}
         for ticker in sector_tickers:
             try:
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period=period)
-                if not hist.empty:
-                    price_data[ticker] = hist['Close']
-            except:
+                # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
+                ticker_formatted = ticker if '.IS' in ticker or ticker.endswith('.IS') else (ticker + '.IS' if len(ticker) == 5 and ticker.isalpha() else ticker)
+                
+                df = get_price_data(ticker_formatted, period=period)
+                if not df.empty and 'close' in df.columns:
+                    # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
+                    if 'date' in df.columns:
+                        df = df.set_index('date')
+                        df.index = pd.to_datetime(df.index)
+                    elif not isinstance(df.index, pd.DatetimeIndex):
+                        df.index = pd.to_datetime(df.index)
+                    
+                    # Tarihleri normalize et
+                    df.index = df.index.normalize()
+                    
+                    # Close fiyatlarını al
+                    price_data[ticker] = df['close']
+            except Exception as e:
+                print(f"⚠️  {ticker} için veri çekilemedi: {e}")
                 continue
         
         if len(price_data) < 2:
+            print(f"⚠️  Yeterli fiyat verisi bulunamadı (sadece {len(price_data)} hisse)")
             return pd.DataFrame()
         
-        # DataFrame oluştur
+        # Tüm tarihleri birleştir
+        all_dates = set()
+        for series in price_data.values():
+            all_dates.update(series.index)
+        
+        # Yeni index oluştur
+        new_index = pd.DatetimeIndex(sorted(all_dates))
+        
+        # DataFrame oluştur ve reindex et
         price_df = pd.DataFrame(price_data)
+        price_df = price_df.reindex(new_index)
+        
+        # Eksik değerleri forward fill ile doldur
+        price_df = price_df.ffill()
+        
+        # Hala eksik değerleri drop et
+        price_df = price_df.dropna()
+        
+        if len(price_df) < 30:
+            print(f"⚠️  Yeterli ortak veri noktası yok (sadece {len(price_df)} gün)")
+            return pd.DataFrame()
         
         # Getiri hesapla
         returns_df = price_df.pct_change().dropna()
+        
+        if len(returns_df) < 10:
+            print(f"⚠️  Yeterli getiri verisi yok (sadece {len(returns_df)} gün)")
+            return pd.DataFrame()
         
         # Korelasyon matrisi
         correlation_matrix = returns_df.corr()
@@ -212,6 +253,8 @@ def analyze_sector_correlation(
         
     except Exception as e:
         print(f"⚠️  Sektör korelasyon analizi hatası: {e}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame()
 
 
