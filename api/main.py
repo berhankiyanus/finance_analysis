@@ -6,10 +6,11 @@ Streamlit uygulamasındaki prediction_model.py'yi API servisine dönüştürür.
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import os
 import sys
 from pathlib import Path
+import pandas as pd
 
 # Proje kök dizinini path'e ekle
 project_root = Path(__file__).parent.parent
@@ -57,6 +58,8 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "/predict": "POST - Fiyat yönü tahmini",
+            "/analyze/{hisse_kodu}": "POST - Tam analiz (veri toplama, sentiment, prediction, SHAP, Gemini)",
+            "/optimize_portfolio": "POST - Portföy optimizasyonu",
             "/report/{hisse_kodu}": "GET - Analist raporu",
             "/health": "GET - API sağlık kontrolü"
         }
@@ -223,6 +226,213 @@ def _rule_based_prediction(ticker: str, feature_vector: Dict, reason: str) -> Pr
         feature_vector=feature_vector,
         message=f"Kural tabanlı tahmin (Model kullanılamadı: {reason})"
     )
+
+
+@app.post("/analyze/{hisse_kodu}")
+async def analyze_stock(hisse_kodu: str, company_name: Optional[str] = None, days_back: int = 30):
+    """
+    Belirtilen hisse için tam analiz yapar.
+    
+    Bu endpoint, data_collection, sentiment_analysis, prediction_model, 
+    explainability ve gemini_reporting modüllerini sırayla çalıştırır.
+    
+    Parametreler:
+    ------------
+    hisse_kodu : str
+        Borsa kodu (örn: "THYAO", "AAPL")
+    company_name : str, optional
+        Şirket adı (otomatik bulunamazsa)
+    days_back : int
+        Kaç gün geriye gidilecek (haberler için, varsayılan: 30)
+    
+    Döndürür:
+    --------
+    dict
+        Tam analiz sonuçları: {
+            'price_data': {...},
+            'news_data': {...},
+            'sentiment_scores': {...},
+            'prediction': {...},
+            'shap_explanation': {...},
+            'gemini_report': {...},
+            'scores': {...}
+        }
+    """
+    
+    try:
+        ticker = hisse_kodu.upper()
+        company_name = company_name or ticker
+        
+        # 1. Veri toplama
+        from src.data_collection import get_all_data_for_stock
+        all_data = get_all_data_for_stock(
+            ticker=ticker,
+            company_name=company_name,
+            period="1y",
+            days_back=days_back,
+            include_kap=True,
+            include_google_search=True,
+            include_macro=True
+        )
+        
+        # 2. Tam analiz (main.py'deki analyze_company fonksiyonu)
+        results = analyze_company(
+            company_name=company_name,
+            ticker=ticker,
+            days_back=days_back
+        )
+        
+        # 3. SHAP açıklaması (eğer model varsa)
+        shap_explanation = None
+        model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
+        if os.path.exists(model_path):
+            try:
+                predictor = PriceDirectionPredictor(model_path=model_path)
+                feature_vector = results.get('feature_vector', {})
+                if feature_vector:
+                    shap_explanation = predictor.explain_prediction_shap(feature_vector)
+            except Exception as e:
+                shap_explanation = {"error": str(e)}
+        
+        # 4. Response oluştur
+        return {
+            "hisse_kodu": ticker,
+            "company_name": company_name,
+            "data": {
+                "price_data": {
+                    "rows": len(all_data.get('price_df', pd.DataFrame())),
+                    "latest_price": float(all_data['price_df'].iloc[-1]['close']) if not all_data.get('price_df', pd.DataFrame()).empty else None
+                },
+                "news_data": {
+                    "total_news": len(all_data.get('news_df', pd.DataFrame())),
+                    "kap_reports": len(all_data.get('kap_reports', [])),
+                    "google_news": len(all_data.get('google_news', []))
+                },
+                "macro_data": {
+                    "indicators_count": len(all_data.get('macro_data', {}))
+                }
+            },
+            "sentiment_scores": {
+                "hisse_duygu_skoru": results.get('sentiment_score', 0),
+                "piyasa_duygu_skoru": results.get('macro_data', {}).get('piyasa_duygu_skoru', 50.0) if isinstance(results.get('macro_data'), dict) else 50.0
+            },
+            "prediction": results.get('direction_prediction', {}),
+            "shap_explanation": shap_explanation,
+            "gemini_report": {
+                "analyst_report": results.get('detailed_report', {}).get('gemini_analyst_report', ''),
+                "hisse_news_summary": results.get('detailed_report', {}).get('hisse_news_summary', ''),
+                "piyasa_news_summary": results.get('detailed_report', {}).get('piyasa_news_summary', '')
+            },
+            "scores": {
+                "sentiment_score": results.get('sentiment_score', 0),
+                "financial_score": results.get('financial_score', 0),
+                "overall_score": results.get('overall_score', 0)
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analiz yapılırken hata: {str(e)}"
+        )
+
+
+@app.post("/optimize_portfolio")
+async def optimize_portfolio(request: Dict[str, Any]):
+    """
+    Portföy optimizasyonu yapar.
+    
+    Parametreler:
+    ------------
+    request : dict
+        {
+            "tickers": ["THYAO", "EREGL", "TUPRS"],
+            "optimization_type": "max_sharpe" veya "min_volatility",
+            "risk_free_rate": 0.02 (opsiyonel),
+            "total_portfolio_value": 100000.0 (opsiyonel)
+        }
+    
+    Döndürür:
+    --------
+    dict
+        Optimal portföy ağırlıkları ve metrikler
+    """
+    
+    try:
+        from src.portfolio_optimization import calculate_optimal_portfolio_weights
+        from src.data_collection import get_price_data
+        import pandas as pd
+        
+        tickers = request.get('tickers', [])
+        if not tickers:
+            raise HTTPException(
+                status_code=400,
+                detail="tickers listesi boş olamaz"
+            )
+        
+        optimization_type = request.get('optimization_type', 'max_sharpe')
+        risk_free_rate = request.get('risk_free_rate', 0.02)
+        total_portfolio_value = request.get('total_portfolio_value', 100000.0)
+        
+        # Fiyat verilerini topla
+        price_data_dict = {}
+        for ticker in tickers:
+            ticker_clean = ticker.strip().upper()
+            # Türk hisseleri için .IS ekle
+            ticker_for_yfinance = ticker_clean
+            if len(ticker_clean) == 5 and not ticker_clean.endswith('.IS'):
+                ticker_for_yfinance = f"{ticker_clean}.IS"
+            
+            try:
+                price_df = get_price_data(ticker_for_yfinance, period="1y")
+                if not price_df.empty:
+                    price_data_dict[ticker_clean] = price_df['close']
+            except Exception as e:
+                print(f"⚠️  {ticker_clean} fiyat verisi çekilemedi: {e}")
+        
+        if not price_data_dict:
+            raise HTTPException(
+                status_code=404,
+                detail="Hiçbir hisse için fiyat verisi bulunamadı"
+            )
+        
+        # DataFrame oluştur
+        price_data_df = pd.DataFrame(price_data_dict)
+        
+        # Optimizasyon yap
+        result = calculate_optimal_portfolio_weights(
+            price_data=price_data_df,
+            risk_free_rate=risk_free_rate,
+            optimization_type=optimization_type,
+            total_portfolio_value=total_portfolio_value
+        )
+        
+        if 'error' in result:
+            raise HTTPException(
+                status_code=500,
+                detail=result['error']
+            )
+        
+        return {
+            "tickers": tickers,
+            "optimization_type": result.get('optimization_type', optimization_type),
+            "weights": result.get('weights', {}),
+            "metrics": {
+                "expected_annual_return": result.get('expected_annual_return', 0),
+                "annual_volatility": result.get('annual_volatility', 0),
+                "sharpe_ratio": result.get('sharpe_ratio', 0)
+            },
+            "discrete_allocations": result.get('discrete_allocations', {}),
+            "remaining_cash": result.get('remaining_cash', 0)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Portföy optimizasyonu yapılırken hata: {str(e)}"
+        )
 
 
 @app.get("/report/{hisse_kodu}")
