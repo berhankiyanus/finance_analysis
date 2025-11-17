@@ -352,7 +352,8 @@ def generate_detailed_report(
         })
     
     # Getiri analizi
-    return_30d = feature_vector.get('return_30d', 0) * 100
+    # return_30d zaten yüzde olarak geliyor (financial_analysis.py'de * 100 yapılıyor)
+    return_30d = feature_vector.get('return_30d', 0)
     if return_30d > 5:
         financial_factors.append({
             'factor': '30 Günlük Getiri',
@@ -369,7 +370,8 @@ def generate_detailed_report(
         })
     
     # Volatilite analizi
-    volatility = feature_vector.get('volatility_30d', 0) * 100
+    # volatility_30d zaten yüzde olarak geliyor (financial_analysis.py'de * 100 yapılıyor)
+    volatility = feature_vector.get('volatility_30d', 0)
     if volatility > 3:
         financial_factors.append({
             'factor': 'Volatilite (30 Gün)',
