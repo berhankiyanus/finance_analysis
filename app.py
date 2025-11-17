@@ -29,9 +29,11 @@ except:
     pass
 
 # 2. .env dosyasından dene (local için)
+# env_path'i genel olarak tanımla (hem NEWS_API_KEY hem GEMINI_API_KEY için kullanılacak)
+project_root = Path(__file__).parent
+env_path = project_root / '.env'
+
 if NEWS_API_KEY is None:
-    project_root = Path(__file__).parent
-    env_path = project_root / '.env'
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
         NEWS_API_KEY = os.getenv('NEWS_API_KEY')
@@ -70,6 +72,8 @@ except:
 # 2. .env dosyasından dene (local için)
 if GEMINI_API_KEY is None:
     if env_path.exists():
+        # .env dosyasını yükle (eğer daha önce yüklenmediyse)
+        load_dotenv(dotenv_path=env_path, override=False)
         GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
         if GEMINI_API_KEY:
             st.sidebar.success("✅ Gemini API Key .env dosyasından yüklendi")
