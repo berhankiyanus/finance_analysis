@@ -217,55 +217,104 @@ def analyze_social_sentiment_trend(
         Sentiment trend analizi: {'current_sentiment', 'trend', 'hype_score', 'mentions'}
     """
     
-    # Forum postlarını çek (örnek - gerçek uygulamada API kullanılmalı)
-    forum_posts = []
+    # Gerçek veri toplama: NewsAPI ve fiyat verileri
+    news_count = 0
+    avg_sentiment = 0.5
+    volume_change = 0.0
+    price_change = 0.0
+    forum_mentions = 0
+    
+    # 1. NewsAPI'den haber sayısı ve sentiment
     try:
-        # Örnek forum URL (gerçek uygulamada değiştirilmeli)
-        # forum_url = f"https://www.hisse.net/forum/search?q={ticker}"
-        # forum_posts = scrape_forum_posts(forum_url, [ticker, company_name], max_posts=20)
-        pass
-    except:
-        pass
+        from src.data_collection import get_news
+        import os
+        
+        news_df = get_news(
+            company_name=company_name,
+            days_back=days_back,
+            ticker=ticker,
+            api_key=os.getenv('NEWS_API_KEY')
+        )
+        
+        if not news_df.empty:
+            news_count = len(news_df)
+            
+            # Sentiment analizi yap
+            if SENTIMENT_AVAILABLE:
+                try:
+                    analyzer = SentimentAnalyzer()
+                    news_with_sentiment = analyze_news_sentiment(
+                        news_df,
+                        analyzer=analyzer,
+                        company_name=company_name,
+                        ticker=ticker
+                    )
+                    
+                    if 'sentiment_score' in news_with_sentiment.columns:
+                        avg_sentiment = news_with_sentiment['sentiment_score'].mean()
+                        if pd.isna(avg_sentiment):
+                            avg_sentiment = 0.5
+                    else:
+                        avg_sentiment = 0.5
+                except Exception as e:
+                    print(f"⚠️  Sentiment analizi hatası: {e}")
+                    avg_sentiment = 0.5
+    except Exception as e:
+        print(f"⚠️  NewsAPI hatası: {e}")
     
-    # Sentiment analizi
-    if SENTIMENT_AVAILABLE and forum_posts:
-        try:
-            analyzer = SentimentAnalyzer()
-            posts_df = pd.DataFrame(forum_posts)
-            posts_with_sentiment = analyze_news_sentiment(posts_df, analyzer)
+    # 2. Fiyat verilerinden hacim ve fiyat değişimi
+    try:
+        from src.data_collection import get_price_data
+        
+        # Fiyat verisi çek (son days_back + 10 gün, karşılaştırma için)
+        price_df = get_price_data(ticker, period=f"{max(days_back + 10, 30)}d")
+        
+        if not price_df.empty and len(price_df) >= 2:
+            # Son gün vs days_back gün önce
+            current_price = price_df.iloc[-1]['close']
+            current_volume = price_df.iloc[-1]['volume']
             
-            # Ortalama sentiment
-            avg_sentiment = posts_with_sentiment['sentiment_score'].mean() if 'sentiment_score' in posts_with_sentiment.columns else 0.5
-            
-            # Trend (son 3 gün vs önceki 3 gün)
-            if 'date' in posts_with_sentiment.columns and len(posts_with_sentiment) > 5:
-                recent_posts = posts_with_sentiment[
-                    posts_with_sentiment['date'] >= datetime.now() - timedelta(days=3)
-                ]
-                older_posts = posts_with_sentiment[
-                    (posts_with_sentiment['date'] >= datetime.now() - timedelta(days=6)) &
-                    (posts_with_sentiment['date'] < datetime.now() - timedelta(days=3))
-                ]
-                
-                recent_sentiment = recent_posts['sentiment_score'].mean() if not recent_posts.empty else 0.5
-                older_sentiment = older_posts['sentiment_score'].mean() if not older_posts.empty else 0.5
-                
-                trend = "Yükseliş" if recent_sentiment > older_sentiment else "Düşüş" if recent_sentiment < older_sentiment else "Stabil"
+            # days_back gün önceki veri
+            if len(price_df) > days_back:
+                past_price = price_df.iloc[-days_back-1]['close']
+                past_volume = price_df.iloc[-days_back-1]['volume']
             else:
-                trend = "Belirsiz"
-        except:
-            avg_sentiment = 0.5
-            trend = "Belirsiz"
-    else:
-        avg_sentiment = 0.5
-        trend = "Belirsiz"
+                past_price = price_df.iloc[0]['close']
+                past_volume = price_df.iloc[0]['volume']
+            
+            # Değişim yüzdesi
+            if past_price > 0:
+                price_change = ((current_price / past_price) - 1) * 100
+            else:
+                price_change = 0.0
+            
+            if past_volume > 0:
+                volume_change = ((current_volume / past_volume) - 1) * 100
+            else:
+                volume_change = 0.0
+    except Exception as e:
+        print(f"⚠️  Fiyat verisi hatası: {e}")
     
-    # Hype skoru (basit hesaplama)
+    # 3. Forum postları (opsiyonel - şimdilik atlanıyor)
+    # Gerçek forum scraping için API veya özel entegrasyon gerekli
+    forum_posts = []
+    
+    # Trend hesaplama (sentiment'e göre)
+    if avg_sentiment > 0.6:
+        trend = "Yükseliş"
+    elif avg_sentiment < 0.4:
+        trend = "Düşüş"
+    else:
+        trend = "Stabil"
+    
+    # Hype skoru hesaplama (gerçek verilerle)
     hype_score = calculate_hype_score(
         ticker=ticker,
-        news_count=len(forum_posts),
-        forum_mentions=len(forum_posts),
-        sentiment_score=avg_sentiment
+        news_count=news_count,
+        forum_mentions=forum_mentions,
+        sentiment_score=avg_sentiment,
+        volume_change=volume_change,
+        price_change=price_change
     )
     
     return {
@@ -274,7 +323,8 @@ def analyze_social_sentiment_trend(
         'current_sentiment': float(avg_sentiment),
         'trend': trend,
         'hype_score': float(hype_score),
-        'forum_mentions': len(forum_posts),
+        'forum_mentions': forum_mentions,
+        'news_count': news_count,
         'interpretation': _interpret_hype_score(hype_score)
     }
 
