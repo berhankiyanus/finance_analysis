@@ -1,0 +1,256 @@
+"""
+Ana Uygulama
+
+Bu modül, tüm bileşenleri birleştirerek tam analiz akışını çalıştırır.
+"""
+
+import sys
+import os
+import pandas as pd
+from typing import Optional, Tuple
+from datetime import datetime
+
+try:
+    from .data_collection import get_news, get_price_data, get_fundamentals
+    from .sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
+    from .financial_analysis import compute_features, create_feature_vector, compute_financial_score
+    from .scoring import (
+        compute_overall_score,
+        interpret_score,
+        generate_turkish_summary,
+        predict_direction
+    )
+except ImportError:
+    from src.data_collection import get_news, get_price_data, get_fundamentals
+    from src.sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
+    from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
+    from src.scoring import (
+        compute_overall_score,
+        interpret_score,
+        generate_turkish_summary,
+        predict_direction
+    )
+
+
+def analyze_company(
+    company_name: str,
+    ticker: str,
+    days_back: int = 30,
+    sentiment_weight: float = 0.4,
+    financial_weight: float = 0.6,
+    use_fundamentals: bool = True
+) -> dict:
+    """
+    Bir şirket için tam analiz yapar.
+    
+    Parametreler:
+    ------------
+    company_name : str
+        Şirket adı (örn: "Apple")
+    ticker : str
+        Borsa kodu (örn: "AAPL")
+    days_back : int
+        Kaç gün geriye gidilecek (varsayılan: 30)
+    sentiment_weight : float
+        Haber ağırlığı (varsayılan: 0.4)
+    financial_weight : float
+        Finansal ağırlık (varsayılan: 0.6)
+    use_fundamentals : bool
+        Temel finansal göstergeleri kullan (varsayılan: True)
+    
+    Döndürür:
+    --------
+    dict
+        Tüm analiz sonuçları
+    """
+    
+    print(f"\n{'='*60}")
+    print(f"🔍 {company_name} ({ticker}) ANALİZİ BAŞLIYOR...")
+    print(f"{'='*60}\n")
+    
+    # 1. VERİ TOPLAMA
+    print("📥 1. Veri toplanıyor...")
+    
+    # Haberler
+    print("   📰 Haberler çekiliyor...")
+    news_df = get_news(company_name, days_back=days_back)
+    
+    # Fiyat verisi
+    print("   💰 Fiyat verisi çekiliyor...")
+    price_df = get_price_data(ticker, period="1y")
+    
+    # Finansal göstergeler (opsiyonel)
+    fundamentals = None
+    if use_fundamentals:
+        print("   📊 Finansal göstergeler çekiliyor...")
+        fundamentals = get_fundamentals(ticker)
+    
+    print("✅ Veri toplama tamamlandı.\n")
+    
+    # 2. SENTIMENT ANALİZİ
+    print("🤖 2. Sentiment analizi yapılıyor...")
+    
+    analyzer = SentimentAnalyzer()
+    news_df_with_sentiment = analyze_news_sentiment(news_df, analyzer)
+    
+    # Toplam sentiment skoru
+    sentiment_score = aggregate_sentiment(news_df_with_sentiment)
+    
+    print(f"✅ Sentiment analizi tamamlandı. Skor: {sentiment_score:.2f}/100\n")
+    
+    # 3. FİNANSAL ANALİZ
+    print("📈 3. Finansal analiz yapılıyor...")
+    
+    # Feature'ları hesapla
+    price_df_with_features = compute_features(price_df)
+    
+    # Feature vektörü oluştur
+    feature_vector = create_feature_vector(price_df_with_features, fundamentals)
+    
+    # Finansal skor
+    financial_score = compute_financial_score(feature_vector)
+    
+    print(f"✅ Finansal analiz tamamlandı. Skor: {financial_score:.2f}/100\n")
+    
+    # 4. SKORLAMA
+    print("🎯 4. Genel durum skoru hesaplanıyor...")
+    
+    overall_score = compute_overall_score(
+        sentiment_score,
+        financial_score,
+        sentiment_weight=sentiment_weight,
+        financial_weight=financial_weight
+    )
+    
+    interpretation = interpret_score(overall_score)
+    
+    # Son 30 günlük fiyat değişimi
+    if len(price_df) >= 30:
+        price_change_30d = (price_df.iloc[-1]['close'] / price_df.iloc[-30]['close'] - 1) * 100
+    else:
+        price_change_30d = None
+    
+    print(f"✅ Genel durum skoru: {overall_score:.2f}/100\n")
+    
+    # 5. YÖN TAHMİNİ (OPSİYONEL)
+    print("🔮 5. Yön tahmini yapılıyor...")
+    
+    # Eğitilmiş model varsa kullan
+    model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
+    if os.path.exists(model_path):
+        direction_prediction = predict_direction(feature_vector, model_path=model_path)
+        print(f"✅ ML Model Tahmini: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
+    else:
+        # Basit kural tabanlı tahmin
+        direction_prediction = predict_direction(feature_vector)
+        print(f"✅ Kural Tabanlı Tahmin: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
+        print(f"   💡 İpucu: Daha iyi tahmin için model eğitin: python3 train_model.py {ticker}")
+    
+    # 6. RAPOR OLUŞTURMA
+    print("📝 6. Rapor oluşturuluyor...\n")
+    
+    summary = generate_turkish_summary(
+        company_name=company_name,
+        ticker=ticker,
+        sentiment_score=sentiment_score,
+        financial_score=financial_score,
+        overall_score=overall_score,
+        news_count=len(news_df),
+        interpretation=interpretation,
+        price_change_30d=price_change_30d
+    )
+    
+    # Sonuçları birleştir
+    results = {
+        'company_name': company_name,
+        'ticker': ticker,
+        'sentiment_score': sentiment_score,
+        'financial_score': financial_score,
+        'overall_score': overall_score,
+        'interpretation': interpretation,
+        'direction_prediction': direction_prediction,
+        'news_count': len(news_df),
+        'news_df': news_df_with_sentiment,
+        'price_df': price_df_with_features,
+        'feature_vector': feature_vector,
+        'fundamentals': fundamentals,
+        'summary': summary
+    }
+    
+    return results
+
+
+def main():
+    """
+    Ana fonksiyon - komut satırından çalıştırılır.
+    """
+    
+    # Örnek kullanım
+    if len(sys.argv) < 3:
+        print("""
+Kullanım:
+    python -m src.main <şirket_adı> <ticker> [days_back] [sentiment_weight] [financial_weight]
+
+Örnek:
+    python -m src.main "Apple" "AAPL" 30 0.4 0.6
+    python -m src.main "Microsoft" "MSFT" 30
+    python -m src.main "THY" "THYAO.IS" 30 0.3 0.7
+
+Parametreler:
+    şirket_adı      : Şirket adı (tırnak içinde)
+    ticker          : Borsa kodu (örn: AAPL, MSFT, THYAO.IS)
+    days_back       : Kaç gün geriye gidilecek (varsayılan: 30)
+    sentiment_weight: Haber ağırlığı (varsayılan: 0.4)
+    financial_weight: Finansal ağırlık (varsayılan: 0.6)
+        """)
+        return
+    
+    company_name = sys.argv[1]
+    ticker = sys.argv[2]
+    days_back = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+    sentiment_weight = float(sys.argv[4]) if len(sys.argv) > 4 else 0.4
+    financial_weight = float(sys.argv[5]) if len(sys.argv) > 5 else 0.6
+    
+    try:
+        # Analiz yap
+        results = analyze_company(
+            company_name=company_name,
+            ticker=ticker,
+            days_back=days_back,
+            sentiment_weight=sentiment_weight,
+            financial_weight=financial_weight
+        )
+        
+        # Raporu yazdır
+        print(results['summary'])
+        
+        # Ek bilgiler
+        print("\n📊 DETAYLI BİLGİLER")
+        print(f"   • Analiz edilen haber sayısı: {results['news_count']}")
+        print(f"   • Fiyat verisi gün sayısı: {len(results['price_df'])}")
+        
+        if results['fundamentals']:
+            print(f"   • Finansal gösterge sayısı: {len(results['fundamentals'])}")
+        
+        print(f"\n   • Yön tahmini: {results['direction_prediction']['direction']}")
+        print(f"   • Tahmin nedeni: {results['direction_prediction']['reason']}")
+        
+        # Haber özeti
+        if not results['news_df'].empty:
+            print("\n📰 HABER ÖZETİ (İlk 5 haber):")
+            for idx, row in results['news_df'].head(5).iterrows():
+                sentiment_emoji = "🟢" if row['sentiment_class'] == 'positive' else \
+                                 "🔴" if row['sentiment_class'] == 'negative' else "🟡"
+                print(f"   {sentiment_emoji} {row['title'][:60]}...")
+                print(f"      Sentiment: {row['sentiment_class']} ({row['sentiment_confidence']:.2%})")
+        
+    except Exception as e:
+        print(f"\n❌ Hata oluştu: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+
