@@ -82,6 +82,12 @@ class SentimentAnalyzer:
         Transformer modeli ile sentiment analizi.
         """
         try:
+            # Metni temizle ve uzunluğunu kontrol et
+            text = text.strip()
+            if len(text) < 10:
+                # Çok kısa metinler için kural tabanlı analiz
+                return self._analyze_with_rules(text)
+            
             # Metni tokenize et
             inputs = self.tokenizer(
                 text,
@@ -107,13 +113,32 @@ class SentimentAnalyzer:
             predicted_class = classes[predicted_class_idx]
             confidence = float(probs[predicted_class_idx])
             
+            # Eğer confidence çok düşükse (0.4'ten az) ve pozitif/negatif olasılıkları yakınsa,
+            # kural tabanlı analizi de dene ve karşılaştır
+            pos_prob = float(probs[0])
+            neg_prob = float(probs[1])
+            neu_prob = float(probs[2])
+            
+            # Eğer neutral olasılığı çok yüksekse (>0.7) ama pozitif/negatif arasında fark varsa,
+            # daha agresif bir threshold kullan
+            if predicted_class == 'neutral' and neu_prob > 0.7:
+                # Pozitif ve negatif arasındaki farka bak
+                diff = abs(pos_prob - neg_prob)
+                if diff > 0.15:  # %15'ten fazla fark varsa
+                    if pos_prob > neg_prob:
+                        predicted_class = 'positive'
+                        confidence = pos_prob
+                    else:
+                        predicted_class = 'negative'
+                        confidence = neg_prob
+            
             return {
                 'class': predicted_class,
                 'confidence': confidence,
                 'probs': {
-                    'positive': float(probs[0]),
-                    'negative': float(probs[1]),
-                    'neutral': float(probs[2])
+                    'positive': pos_prob,
+                    'negative': neg_prob,
+                    'neutral': neu_prob
                 }
             }
             
@@ -127,52 +152,69 @@ class SentimentAnalyzer:
         """
         text_lower = text.lower()
         
-        # Pozitif kelimeler
+        # Pozitif kelimeler (daha kapsamlı liste)
         positive_words = [
             'artış', 'yükseliş', 'büyüme', 'kâr', 'başarı', 'güçlü', 'iyi',
-            'olumlu', 'yükseldi', 'arttı', 'kazandı', 'başarılı',
+            'olumlu', 'yükseldi', 'arttı', 'kazandı', 'başarılı', 'yükselme',
+            'ilerleme', 'gelişme', 'iyileşme', 'kazanç', 'getiri', 'fayda',
+            'avantaj', 'üstün', 'mükemmel', 'harika', 'süper', 'rekor',
             'increase', 'growth', 'profit', 'success', 'strong', 'good',
-            'positive', 'rose', 'gained', 'successful'
+            'positive', 'rose', 'gained', 'successful', 'up', 'gain',
+            'improve', 'better', 'excellent', 'great', 'surge', 'rally',
+            'boost', 'rise', 'climb', 'soar', 'jump', 'advance'
         ]
         
-        # Negatif kelimeler
+        # Negatif kelimeler (daha kapsamlı liste)
         negative_words = [
             'düşüş', 'kayıp', 'zarar', 'zayıf', 'kötü', 'olumsuz', 'düştü',
-            'azaldı', 'kaybetti', 'başarısız', 'risk', 'tehlike',
+            'azaldı', 'kaybetti', 'başarısız', 'risk', 'tehlike', 'düşme',
+            'gerileme', 'kriz', 'sorun', 'problem', 'hata', 'başarısızlık',
+            'kayıp', 'zarar', 'zarar', 'kayıp', 'düşüş', 'düşme', 'azalma',
             'decrease', 'loss', 'weak', 'bad', 'negative', 'fell', 'declined',
-            'lost', 'failed', 'risk', 'danger'
+            'lost', 'failed', 'risk', 'danger', 'down', 'drop', 'fall',
+            'crash', 'plunge', 'sink', 'tumble', 'slump', 'downturn',
+            'recession', 'crisis', 'problem', 'issue', 'concern', 'worry'
         ]
         
         # Kelime sayılarını hesapla
         pos_count = sum(1 for word in positive_words if word in text_lower)
         neg_count = sum(1 for word in negative_words if word in text_lower)
         
-        # Skor hesapla
+        # Skor hesapla (kelime sayısına göre normalize et)
         total_words = len(text.split())
         if total_words == 0:
             total_words = 1
         
-        pos_score = pos_count / total_words
-        neg_score = neg_count / total_words
+        # Daha agresif threshold - daha az kelime ile de pozitif/negatif tespit et
+        pos_score = pos_count / max(total_words, 10)  # En az 10 kelimeye normalize et
+        neg_score = neg_count / max(total_words, 10)
         
-        # Sınıf belirle
-        if pos_score > neg_score and pos_score > 0.01:
+        # Sınıf belirle (daha düşük threshold)
+        if pos_count > 0 and pos_count >= neg_count:
             class_name = 'positive'
-            confidence = min(0.9, pos_score * 10)
-        elif neg_score > pos_score and neg_score > 0.01:
+            confidence = min(0.85, 0.5 + (pos_count * 0.1))
+        elif neg_count > 0 and neg_count > pos_count:
             class_name = 'negative'
-            confidence = min(0.9, neg_score * 10)
+            confidence = min(0.85, 0.5 + (neg_count * 0.1))
         else:
             class_name = 'neutral'
             confidence = 0.5
         
         # Olasılıkları normalize et
-        total = pos_score + neg_score + 0.1
+        total = pos_count + neg_count + 1  # +1 neutral için
+        if total == 0:
+            total = 1
+        
         probs = {
-            'positive': pos_score / total,
-            'negative': neg_score / total,
-            'neutral': 0.1 / total
+            'positive': pos_count / total,
+            'negative': neg_count / total,
+            'neutral': 1 / total if pos_count == 0 and neg_count == 0 else 0.3
         }
+        
+        # Normalize et
+        prob_total = sum(probs.values())
+        if prob_total > 0:
+            probs = {k: v / prob_total for k, v in probs.items()}
         
         return {
             'class': class_name,
@@ -215,14 +257,28 @@ def news_to_score(sentiment_result: Dict) -> float:
     float
         -1 (çok negatif) ile +1 (çok pozitif) arası skor
     """
-    if sentiment_result['class'] == 'positive':
-        # Pozitif sınıf için: olasılık * 1
-        return sentiment_result['probs']['positive']
-    elif sentiment_result['class'] == 'negative':
-        # Negatif sınıf için: olasılık * -1
-        return -sentiment_result['probs']['negative']
-    else:  # neutral
-        return 0.0
+    probs = sentiment_result.get('probs', {})
+    pos_prob = probs.get('positive', 0.0)
+    neg_prob = probs.get('negative', 0.0)
+    neu_prob = probs.get('neutral', 0.0)
+    
+    # Confidence ile ağırlıklandır
+    confidence = sentiment_result.get('confidence', 0.5)
+    
+    # Pozitif ve negatif olasılıklar arasındaki farkı kullan
+    # Eğer neutral çok yüksekse ama pozitif/negatif arasında fark varsa, onu kullan
+    if neu_prob > 0.7:
+        # Neutral çok yüksek, ama pozitif/negatif farkına bak
+        diff = pos_prob - neg_prob
+        if abs(diff) > 0.1:  # %10'dan fazla fark varsa
+            return diff * confidence
+        else:
+            return 0.0
+    else:
+        # Normal durum: pozitif ve negatif olasılıklar arasındaki fark
+        score = pos_prob - neg_prob
+        # Confidence ile ağırlıklandır
+        return score * confidence
 
 
 def aggregate_sentiment(news_df: pd.DataFrame) -> float:
@@ -301,8 +357,25 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
     results = []
     
     for idx, row in news_df.iterrows():
-        # Başlık ve özeti birleştir
-        text = f"{row.get('title', '')} {row.get('summary', '')}"
+        # Başlık, özet ve içeriği birleştir (daha iyi analiz için)
+        title = str(row.get('title', '')).strip()
+        summary = str(row.get('summary', '')).strip()
+        content = str(row.get('content', '')).strip()
+        
+        # Metinleri birleştir (boş olanları atla)
+        text_parts = []
+        if title:
+            text_parts.append(title)
+        if summary and summary != title:  # Özet başlıktan farklıysa ekle
+            text_parts.append(summary)
+        if content and len(content) > 50:  # İçerik yeterince uzunsa ekle (ilk 500 karakter)
+            text_parts.append(content[:500])
+        
+        text = " ".join(text_parts).strip()
+        
+        # Eğer metin çok kısa ise, sadece başlık kullan
+        if len(text) < 20 and title:
+            text = title
         
         # Sentiment analizi
         sentiment_result = analyzer.analyze_sentiment(text)
