@@ -12,9 +12,13 @@ import requests
 import time
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 # .env dosyasından API key'leri yükle
-load_dotenv()
+# Proje kök dizinini bul (.env dosyasının olduğu yer)
+project_root = Path(__file__).parent.parent.parent
+env_path = project_root / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = None) -> pd.DataFrame:
@@ -39,6 +43,16 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     # API key'i al
     if api_key is None:
         api_key = os.getenv('NEWS_API_KEY')
+    
+    # Debug: API key kontrolü
+    if api_key:
+        print(f"✅ NEWS_API_KEY bulundu: {api_key[:10]}...")
+    else:
+        print("⚠️  NEWS_API_KEY bulunamadı!")
+        print(f"   .env dosyası yolu: {env_path}")
+        print(f"   .env dosyası var mı: {env_path.exists()}")
+        if env_path.exists():
+            print(f"   .env içeriği (ilk 50 karakter): {env_path.read_text()[:50]}")
     
     # Eğer API key yoksa, dummy veri döndür (test amaçlı)
     if api_key is None:
