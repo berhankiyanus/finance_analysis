@@ -158,13 +158,13 @@ def calculate_hype_score(
         Hype skoru (0-100 arası)
     """
     
-    # Ağırlıklar
+    # Ağırlıklar (fiyat ve hacim değişimine daha fazla ağırlık ver)
     weights = {
-        'news': 0.25,
-        'forum': 0.20,
-        'sentiment': 0.25,
-        'volume': 0.15,
-        'price': 0.15
+        'news': 0.20,
+        'forum': 0.15,
+        'sentiment': 0.20,
+        'volume': 0.25,  # Artırıldı
+        'price': 0.20    # Artırıldı
     }
     
     # Haber sayısı skoru (0-100, logaritmik ölçek)
@@ -365,29 +365,69 @@ def find_trending_stocks(
         Trending hisseler: {'ticker', 'hype_score', 'sentiment', 'trend', 'rank'}
     """
     
+    # Türk hisseleri için şirket adları mapping
+    TURKISH_STOCKS = {
+        'THYAO': 'Türk Hava Yolları',
+        'EREGL': 'Ereğli Demir Çelik',
+        'TUPRS': 'Tüpraş',
+        'GARAN': 'Garanti BBVA',
+        'AKBNK': 'Akbank',
+        'PGSUS': 'Pegasus Hava Yolları',
+        'DOAS': 'Doğuş Otomotiv',
+        'SASA': 'Sasa Polyester',
+        'BIMAS': 'BİM',
+        'MIGRS': 'Migros',
+        'KOZAL': 'Koza Altın',
+        'PETKM': 'Petkim',
+        'SAHOL': 'Hacı Ömer Sabancı Holding',
+        'KCHOL': 'Koç Holding',
+        'ARCLK': 'Arçelik',
+        'FROTO': 'Ford Otosan',
+        'TOASO': 'Tofaş',
+        'ASELS': 'Aselsan',
+        'HALKB': 'Halkbank',
+        'ISCTR': 'İş Bankası',
+        'YKBNK': 'Yapı Kredi',
+        'VAKBN': 'Vakıfbank',
+        'ENKAI': 'Enka İnşaat',
+        'TEKTU': 'Tekfen Holding',
+        'CCOLA': 'Coca Cola İçecek'
+    }
+    
     results = []
     
     for ticker in tickers:
         try:
+            # Şirket adını bul
+            ticker_clean = ticker.strip().upper()
+            company_name = TURKISH_STOCKS.get(ticker_clean, ticker_clean)
+            
+            print(f"📊 {ticker_clean} ({company_name}) analiz ediliyor...")
+            
             analysis = analyze_social_sentiment_trend(
-                ticker=ticker,
-                company_name=ticker,
+                ticker=ticker_clean,
+                company_name=company_name,
                 days_back=days_back
             )
             
             results.append({
-                'ticker': ticker,
+                'ticker': ticker_clean,
                 'hype_score': analysis['hype_score'],
                 'sentiment': analysis['current_sentiment'],
                 'trend': analysis['trend'],
-                'mentions': analysis['forum_mentions']
+                'mentions': analysis['forum_mentions'],
+                'news_count': analysis.get('news_count', 0)
             })
             
+            print(f"   ✅ Hype: {analysis['hype_score']:.2f}, Sentiment: {analysis['current_sentiment']:.2f}, Haber: {analysis.get('news_count', 0)}")
+            
             # Rate limiting
-            time.sleep(0.5)
+            time.sleep(0.3)
             
         except Exception as e:
             print(f"⚠️  {ticker} analizi hatası: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     if not results:
