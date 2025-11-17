@@ -69,8 +69,19 @@ def calculate_optimal_portfolio_weights(
     
     if method == 'max_sharpe':
         # Maksimum Sharpe Oranı
-        weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
-        cleaned_weights = ef.clean_weights()
+        try:
+            weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
+            cleaned_weights = ef.clean_weights()
+        except ValueError as e:
+            # Eğer hiçbir varlık risksiz faiz oranını geçmiyorsa, min_volatility'ye fallback yap
+            if "at least one of the assets must have an expected return exceeding the risk-free rate" in str(e):
+                print(f"⚠️  Maksimum Sharpe optimizasyonu yapılamadı: Beklenen getiriler risksiz faiz oranından düşük.")
+                print(f"   Minimum volatilite optimizasyonuna geçiliyor...")
+                weights = ef.min_volatility()
+                cleaned_weights = ef.clean_weights()
+                method = 'min_volatility'  # Method'u güncelle
+            else:
+                raise
     elif method == 'min_volatility':
         # Minimum Volatilite
         weights = ef.min_volatility()
@@ -81,7 +92,24 @@ def calculate_optimal_portfolio_weights(
     # Dict'e çevir (ağırlıkları normalize et)
     weights_dict = {ticker: float(weight) for ticker, weight in cleaned_weights.items()}
     
-    return weights_dict
+    # Portföy performans metriklerini hesapla
+    try:
+        expected_annual_return, annual_volatility, sharpe_ratio = ef.portfolio_performance(
+            verbose=False, risk_free_rate=risk_free_rate
+        )
+    except:
+        # Eğer portfolio_performance çalışmazsa, basit hesaplamalar yap
+        expected_annual_return = (mu * pd.Series(weights_dict)).sum()
+        annual_volatility = np.sqrt(np.dot(weights_dict.values(), np.dot(S, list(weights_dict.values()))))
+        sharpe_ratio = (expected_annual_return - risk_free_rate) / annual_volatility if annual_volatility > 0 else None
+    
+    return {
+        'weights': weights_dict,
+        'expected_return': expected_annual_return,
+        'annual_volatility': annual_volatility,
+        'sharpe_ratio': sharpe_ratio,
+        'method_used': method  # Gerçekte kullanılan method (fallback durumunda)
+    }
 
 
 def calculate_portfolio_metrics(

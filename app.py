@@ -1090,14 +1090,29 @@ elif page == "💼 Portföy Optimizasyonu":
                                 price_df = price_df.ffill().dropna()
                                 
                                 # Optimizasyon yap
-                                weights = calculate_optimal_portfolio_weights(
+                                result = calculate_optimal_portfolio_weights(
                                     price_df,
                                     method=optimization_method,
                                     risk_free_rate=risk_free_rate
                                 )
                                 
+                                # Eğer method değiştiyse (fallback), kullanıcıya bilgi ver
+                                if result.get('method_used') != optimization_method:
+                                    st.warning(f"⚠️ **Not:** Maksimum Sharpe optimizasyonu yapılamadı (beklenen getiriler risksiz faiz oranından düşük). Minimum volatilite optimizasyonu kullanıldı.")
+                                
+                                weights = result['weights']
+                                
                                 # Sonuçları göster
                                 st.success("✅ Optimizasyon tamamlandı!")
+                                
+                                # Performans metriklerini göster
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Beklenen Getiri", f"{result['expected_return']*100:.2f}%")
+                                with col2:
+                                    st.metric("Yıllık Volatilite", f"{result['annual_volatility']*100:.2f}%")
+                                with col3:
+                                    st.metric("Sharpe Oranı", f"{result['sharpe_ratio']:.2f}" if result['sharpe_ratio'] else "N/A")
                                 
                                 # Ağırlıklar grafiği
                                 weights_df = pd.DataFrame({
