@@ -87,6 +87,31 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         # Arama terimlerini hazırla (farklı varyasyonlar dene)
         search_terms = [company_name]
         
+        # Türkçe şirket adları için özel işlem (Koç, Sabancı, vb.)
+        # Türkçe karakterleri İngilizce karşılıklarına çevir
+        turkish_to_english = {
+            'ç': 'c', 'Ç': 'C',
+            'ğ': 'g', 'Ğ': 'G',
+            'ı': 'i', 'İ': 'I',
+            'ö': 'o', 'Ö': 'O',
+            'ş': 's', 'Ş': 'S',
+            'ü': 'u', 'Ü': 'U'
+        }
+        
+        # Türkçe karakterleri çevir
+        company_name_english = company_name
+        for turkish, english in turkish_to_english.items():
+            company_name_english = company_name_english.replace(turkish, english)
+        
+        # Eğer çevrilmiş versiyon farklıysa, onu da ekle
+        if company_name_english != company_name:
+            search_terms.append(company_name_english)
+            # Örnek: "Koç Holding" -> "Koc Holding" ve "Koc"
+            if ' ' in company_name_english:
+                first_word = company_name_english.split()[0]
+                if first_word not in search_terms:
+                    search_terms.append(first_word)
+        
         # Ticker sembolü varsa arama terimlerine ekle
         if ticker:
             search_terms.append(ticker)
