@@ -573,6 +573,25 @@ def _get_dummy_news(company_name: str, days_back: int) -> pd.DataFrame:
     return pd.DataFrame(dummy_news)
 
 
+def get_stock_data(ticker: str, period: str = "1y") -> pd.DataFrame:
+    """
+    Hisse için OHLCV verisini çeker (get_price_data için alias).
+    
+    Parametreler:
+    ------------
+    ticker : str
+        Borsa kodu (örn: "AAPL", "THYAO.IS", "KCHOL")
+    period : str
+        Veri periyodu (örn: "1mo", "3mo", "6mo", "1y", "2y", "5y")
+    
+    Döndürür:
+    --------
+    pd.DataFrame
+        Kolonlar: 'date', 'open', 'high', 'low', 'close', 'volume', 'adjusted_close'
+    """
+    return get_price_data(ticker, period)
+
+
 def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
     """
     Şirket için fiyat verisi çeker.

@@ -38,6 +38,7 @@ if not GEMINI_API_KEY:
 from src.main import analyze_company
 from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
 from src.data_collection import get_price_data, get_fundamentals
+import requests
 
 # Streamlit cache decorator'ları - performans için
 @st.cache_data(ttl=3600)  # 1 saat cache - yfinance'den günlük fiyat verisi

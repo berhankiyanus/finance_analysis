@@ -17,17 +17,52 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.prediction_model import PriceDirectionPredictor
-from src.financial_analysis import create_feature_vector
-from src.data_collection import get_price_data, get_news
+from src.financial_analysis import create_feature_vector, create_features
+from src.data_collection import get_price_data, get_news, get_stock_data
 from src.financial_analysis import compute_features
+from src.tcmb_data import get_policy_rate
 from src.main import analyze_company
 from src.scoring import generate_detailed_report
+from src.utils import ensure_directory_exists
+import os
 
 app = FastAPI(
     title="AI Borsa Analisti API",
     description="Finansal analiz ve fiyat yönü tahmini için REST API",
     version="1.0.0"
 )
+
+# Global model cache (uygulama başlarken yüklenecek)
+demo_model = None
+demo_model_path = None
+
+@app.on_event("startup")
+async def load_demo_model():
+    """Uygulama başlarken demo modelini yükle"""
+    global demo_model, demo_model_path
+    
+    # Models dizinini oluştur
+    ensure_directory_exists('models')
+    
+    # Demo model dosyasını bul (THYAO için)
+    possible_paths = [
+        "models/price_predictor_thyao_is.pkl",
+        "models/price_predictor_thyao.pkl",
+        "models/demo_model.pkl"
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                demo_model = PriceDirectionPredictor(model_path=path)
+                demo_model_path = path
+                print(f"✅ Demo model yüklendi: {path}")
+                break
+            except Exception as e:
+                print(f"⚠️  Model yüklenemedi ({path}): {e}")
+    
+    if demo_model is None:
+        print("⚠️  Demo model bulunamadı. Rule-based fallback kullanılacak.")
 
 
 class PredictionRequest(BaseModel):

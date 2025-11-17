@@ -381,6 +381,42 @@ def detect_candlestick_patterns(open: pd.Series, high: pd.Series, low: pd.Series
     return patterns
 
 
+def create_features(stock_df: pd.DataFrame, tcmb_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """
+    Hisse ve TCMB verilerini birleştirerek özellik DataFrame'i oluşturur.
+    
+    Parametreler:
+    ------------
+    stock_df : pd.DataFrame
+        Hisse fiyat verisi ('date', 'open', 'high', 'low', 'close', 'volume' kolonları)
+    tcmb_df : pd.DataFrame, optional
+        TCMB makroekonomik verisi ('date', 'value' kolonları - faiz, TÜFE, USD/TRY vb.)
+    
+    Döndürür:
+    --------
+    pd.DataFrame
+        Teknik göstergeler ve makro verilerle zenginleştirilmiş DataFrame
+    """
+    # compute_features fonksiyonunu çağır (mevcut implementasyon)
+    features_df = compute_features(
+        stock_df,
+        faiz_orani=tcmb_df['value'] if tcmb_df is not None and 'value' in tcmb_df.columns else None
+    )
+    
+    # TCMB verisini birleştir (eğer varsa)
+    if tcmb_df is not None and not tcmb_df.empty:
+        # Tarih üzerinden merge (en yakın tarih eşleştirmesi)
+        features_df = features_df.merge(
+            tcmb_df.rename(columns={'value': 'tcmb_rate'}),
+            on='date',
+            how='left'
+        )
+        # Forward fill ile eksik değerleri doldur
+        features_df['tcmb_rate'] = features_df['tcmb_rate'].fillna(method='ffill')
+    
+    return features_df
+
+
 def compute_features(price_df: pd.DataFrame, 
                     hisse_duygu_skoru: Optional[pd.Series] = None,
                     piyasa_duygu_skoru: Optional[pd.Series] = None,
