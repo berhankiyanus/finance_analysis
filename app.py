@@ -281,6 +281,14 @@ if page == "🏠 Ana Sayfa - Analiz":
                         # Sonuçları göster
                         st.success("✅ Analiz tamamlandı!")
                         
+                        # Tabs yapısı - v4 yol haritası gereksinimi
+                        tab_overview, tab_detailed, tab_news_report, tab_portfolio = st.tabs([
+                            "📊 Genel Bakış",
+                            "📈 Detaylı Analiz",
+                            "📰 Haberler & Rapor",
+                            "💼 Portföy"
+                        ])
+                        
                         # API key kontrolü ve uyarı - dummy veri kontrolü
                         news_df = results.get('news_df', pd.DataFrame())
                         news_count = results.get('news_count', 0)
@@ -311,51 +319,76 @@ if page == "🏠 Ana Sayfa - Analiz":
                         elif news_count > 0 and news_count <= 3:
                             st.info("ℹ️ **Bilgi:** Çok az haber bulundu. Bu, seçilen periyotta gerçekten az haber olmasından kaynaklanıyor olabilir. Daha fazla haber için periyodu artırabilirsiniz.")
                         
-                        # Skorlar
-                        col_score1, col_score2, col_score3 = st.columns(3)
-                        
-                        with col_score1:
-                            st.metric(
-                                "📰 Sentiment Skoru",
-                                f"{results['sentiment_score']:.1f}/100",
-                                delta=f"{results['sentiment_score'] - 50:.1f}"
-                            )
-                        
-                        with col_score2:
-                            st.metric(
-                                "💰 Finansal Skor",
-                                f"{results['financial_score']:.1f}/100",
-                                delta=f"{results['financial_score'] - 50:.1f}"
-                            )
-                        
-                        with col_score3:
-                            score_color = "normal"
-                            if results['overall_score'] >= 70:
+                        # TAB 1: Genel Bakış
+                        with tab_overview:
+                            # Skorlar
+                            col_score1, col_score2, col_score3 = st.columns(3)
+                            
+                            with col_score1:
+                                st.metric(
+                                    "📰 Sentiment Skoru",
+                                    f"{results['sentiment_score']:.1f}/100",
+                                    delta=f"{results['sentiment_score'] - 50:.1f}"
+                                )
+                            
+                            with col_score2:
+                                st.metric(
+                                    "💰 Finansal Skor",
+                                    f"{results['financial_score']:.1f}/100",
+                                    delta=f"{results['financial_score'] - 50:.1f}"
+                                )
+                            
+                            with col_score3:
                                 score_color = "normal"
-                            elif results['overall_score'] < 30:
-                                score_color = "inverse"
+                                if results['overall_score'] >= 70:
+                                    score_color = "normal"
+                                elif results['overall_score'] < 30:
+                                    score_color = "inverse"
+                                
+                                st.metric(
+                                    "🎯 Genel Durum Skoru",
+                                    f"{results['overall_score']:.1f}/100",
+                                    delta=f"{results['overall_score'] - 50:.1f}",
+                                    delta_color=score_color
+                                )
                             
-                            st.metric(
-                                "🎯 Genel Durum Skoru",
-                                f"{results['overall_score']:.1f}/100",
-                                delta=f"{results['overall_score'] - 50:.1f}",
-                                delta_color=score_color
-                            )
-                        
-                        # Yorum
-                        interpretation = results['interpretation']
-                        st.info(f"**{interpretation['category']}** - {interpretation['risk_level']}")
-                        st.write(interpretation['recommendation'])
-                        
-                        # Yön tahmini
-                        if 'direction_prediction' in results:
-                            pred = results['direction_prediction']
-                            direction_emoji = {"up": "📈", "down": "📉", "neutral": "➡️"}
-                            direction_tr = {"up": "YÜKSELİŞ", "down": "DÜŞÜŞ", "neutral": "NÖTR"}
+                            # Yorum
+                            interpretation = results['interpretation']
+                            st.info(f"**{interpretation['category']}** - {interpretation['risk_level']}")
+                            st.write(interpretation['recommendation'])
                             
-                            st.write(f"**Yön Tahmini:** {direction_emoji.get(pred.get('direction', 'neutral'), '❓')} "
-                                   f"{direction_tr.get(pred.get('direction', 'neutral'), 'NÖTR')} "
-                                   f"({pred.get('confidence', 0):.1%} güven)")
+                            # Yön tahmini
+                            if 'direction_prediction' in results:
+                                pred = results['direction_prediction']
+                                direction_emoji = {"up": "📈", "down": "📉", "neutral": "➡️"}
+                                direction_tr = {"up": "YÜKSELİŞ", "down": "DÜŞÜŞ", "neutral": "NÖTR"}
+                                
+                                st.write(f"**Yön Tahmini:** {direction_emoji.get(pred.get('direction', 'neutral'), '❓')} "
+                                       f"{direction_tr.get(pred.get('direction', 'neutral'), 'NÖTR')} "
+                                       f"({pred.get('confidence', 0):.1%} güven)")
+                            
+                            # Hızlı fiyat grafiği
+                            if not results['price_df'].empty:
+                                price_df = results['price_df']
+                                fig_quick = go.Figure()
+                                fig_quick.add_trace(go.Scatter(
+                                    x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                    y=price_df['close'],
+                                    mode='lines',
+                                    name='Fiyat',
+                                    line=dict(color='blue', width=2)
+                                ))
+                                fig_quick.update_layout(
+                                    title=f'{company_name} ({ticker}) - Fiyat Hareketi',
+                                    xaxis_title='Tarih',
+                                    yaxis_title='Fiyat',
+                                    height=400
+                                )
+                                st.plotly_chart(fig_quick, use_container_width=True)
+                        
+                        # TAB 2: Detaylı Analiz
+                        with tab_detailed:
+                            st.subheader("📈 Detaylı Analiz")
                             
                             # SHAP açıklaması (eğer model varsa)
                             model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
@@ -370,118 +403,82 @@ if page == "🏠 Ana Sayfa - Analiz":
                                     if feature_vector:
                                         shap_result = predictor.explain_prediction_shap(feature_vector)
                                         
-                                        with st.expander("🔍 Model Açıklaması (SHAP)", expanded=False):
-                                            explanation_text = format_explanation_for_display(shap_result, pred)
-                                            st.markdown(explanation_text)
+                                        st.subheader("🔍 Model Açıklaması (SHAP)")
+                                        explanation_text = format_explanation_for_display(shap_result, pred if 'direction_prediction' in results else {})
+                                        st.markdown(explanation_text)
+                                        
+                                        # SHAP değerleri grafiği
+                                        if shap_result.get('top_features'):
+                                            shap_df = pd.DataFrame(
+                                                shap_result['top_features'][:10],
+                                                columns=['Feature', 'SHAP Değeri']
+                                            )
                                             
-                                            # SHAP değerleri grafiği
-                                            if shap_result.get('top_features'):
-                                                shap_df = pd.DataFrame(
-                                                    shap_result['top_features'][:10],
-                                                    columns=['Feature', 'SHAP Değeri']
-                                                )
-                                                
-                                                fig_shap = go.Figure(data=[go.Bar(
-                                                    x=shap_df['SHAP Değeri'],
-                                                    y=shap_df['Feature'],
-                                                    orientation='h',
-                                                    marker=dict(
-                                                        color=shap_df['SHAP Değeri'],
-                                                        colorscale='RdYlGn',
-                                                        showscale=True
-                                                    ),
-                                                    text=[f"{v:.4f}" for v in shap_df['SHAP Değeri']],
-                                                    textposition='auto'
-                                                )])
-                                                
-                                                fig_shap.update_layout(
-                                                    title='En Önemli Feature\'lar (SHAP Değerleri)',
-                                                    xaxis_title='SHAP Değeri (Etki)',
-                                                    yaxis_title='Feature',
-                                                    height=400
-                                                )
-                                                
-                                                st.plotly_chart(fig_shap, width='stretch')
+                                            fig_shap = go.Figure(data=[go.Bar(
+                                                x=shap_df['SHAP Değeri'],
+                                                y=shap_df['Feature'],
+                                                orientation='h',
+                                                marker=dict(
+                                                    color=shap_df['SHAP Değeri'],
+                                                    colorscale='RdYlGn',
+                                                    showscale=True
+                                                ),
+                                                text=[f"{v:.4f}" for v in shap_df['SHAP Değeri']],
+                                                textposition='auto'
+                                            )])
+                                            
+                                            fig_shap.update_layout(
+                                                title='En Önemli Feature\'lar (SHAP Değerleri)',
+                                                xaxis_title='SHAP Değeri (Etki)',
+                                                yaxis_title='Feature',
+                                                height=400
+                                            )
+                                            
+                                            st.plotly_chart(fig_shap, width='stretch')
                                 
                                 except Exception as e:
                                     st.info(f"ℹ️ Model açıklaması gösterilemedi: {str(e)}")
-                        
-                        # Detaylı rapor
-                        if 'detailed_report' in results and results['detailed_report']:
-                            detailed_report = results['detailed_report']
                             
-                            st.subheader("📋 Detaylı Analiz Raporu")
-                            
-                            # Markdown raporu göster
-                            st.markdown(detailed_report['summary'])
-                            
-                            # En önemli haberler
-                            if detailed_report.get('news_analysis'):
-                                st.subheader("📰 En Etkili Haberler")
-                                for news in detailed_report['news_analysis'][:5]:
-                                    with st.container():
-                                        col1, col2 = st.columns([1, 4])
+                            # Detaylı rapor
+                            if 'detailed_report' in results and results['detailed_report']:
+                                detailed_report = results['detailed_report']
+                                
+                                st.subheader("📋 Detaylı Analiz Raporu")
+                                st.markdown(detailed_report['summary'])
+                                
+                                # Finansal faktörler
+                                if detailed_report.get('financial_analysis'):
+                                    st.subheader("💰 Finansal Göstergeler")
+                                    for factor in detailed_report['financial_analysis']:
+                                        col1, col2, col3 = st.columns([2, 1, 3])
                                         with col1:
-                                            st.write(f"{news.get('sentiment_emoji', '🟡')} **{news.get('sentiment', 'neutral').upper()}**")
-                                            st.caption(f"Etki: {news.get('impact', 'Orta')}")
-                                            st.caption(f"Güven: {news.get('confidence', 0.0):.1%}")
+                                            st.write(f"**{factor['factor']}**")
                                         with col2:
-                                            st.write(f"**{news.get('title', 'Başlık yok')}**")
-                                            st.caption(f"📅 {news.get('date', 'Bilinmiyor')}")
-                                        st.divider()
-                            
-                            # Finansal faktörler
-                            if detailed_report.get('financial_analysis'):
-                                st.subheader("💰 Finansal Göstergeler")
-                                for factor in detailed_report['financial_analysis']:
-                                    col1, col2, col3 = st.columns([2, 1, 3])
-                                    with col1:
-                                        st.write(f"**{factor['factor']}**")
-                                    with col2:
-                                        st.write(f"`{factor['value']}`")
-                                    with col3:
-                                        st.write(f"{factor['status']} - {factor['impact']}")
-                            
-                            # Öneri nedenleri
-                            if detailed_report.get('recommendation_reasons'):
-                                st.subheader("💡 Al/Sat Önerisi Nedenleri")
-                                for reason in detailed_report['recommendation_reasons']:
-                                    emoji = "✅" if reason['impact'] == 'Pozitif' else "❌" if reason['impact'] == 'Negatif' else "⚠️"
-                                    st.write(f"{emoji} **{reason['type']}:** {reason['reason']}")
-                            
-                            # En önemli faktörler
-                            if detailed_report.get('key_factors'):
-                                st.subheader("🔑 En Önemli Faktörler")
-                                for i, factor in enumerate(detailed_report['key_factors'][:5], 1):
-                                    st.write(f"{i}. **{factor['type']}:** {factor['description']}")
-                            
-                            # Gemini AI Analist Raporu (eğer varsa)
-                            if detailed_report.get('gemini_analyst_report'):
-                                st.subheader("🤖 AI Analist Raporu (Gemini)")
-                                st.info("💡 Bu rapor, Gemini AI tarafından otomatik olarak oluşturulmuştur.")
-                                st.markdown(detailed_report['gemini_analyst_report'])
+                                            st.write(f"`{factor['value']}`")
+                                        with col3:
+                                            st.write(f"{factor['status']} - {factor['impact']}")
                                 
-                                # Haber özetleri
-                                if detailed_report.get('hisse_news_summary'):
-                                    with st.expander("📰 Hisse Bazlı Haber Özeti"):
-                                        st.markdown(detailed_report['hisse_news_summary'])
+                                # Öneri nedenleri
+                                if detailed_report.get('recommendation_reasons'):
+                                    st.subheader("💡 Al/Sat Önerisi Nedenleri")
+                                    for reason in detailed_report['recommendation_reasons']:
+                                        emoji = "✅" if reason['impact'] == 'Pozitif' else "❌" if reason['impact'] == 'Negatif' else "⚠️"
+                                        st.write(f"{emoji} **{reason['type']}:** {reason['reason']}")
                                 
-                                if detailed_report.get('piyasa_news_summary'):
-                                    with st.expander("🌐 Piyasa Geneli Haber Özeti"):
-                                        st.markdown(detailed_report['piyasa_news_summary'])
-                        else:
-                            # Eski rapor formatı (geriye dönük uyumluluk)
-                            with st.expander("📄 Detaylı Rapor"):
-                                st.text(results.get('summary', 'Rapor mevcut değil.'))
-                        
-                        # Grafikler - Tabs ile organize edilmiş
-                        st.subheader("📈 Görselleştirmeler")
-                        
-                        if not results['price_df'].empty:
-                            price_df = results['price_df']
+                                # En önemli faktörler
+                                if detailed_report.get('key_factors'):
+                                    st.subheader("🔑 En Önemli Faktörler")
+                                    for i, factor in enumerate(detailed_report['key_factors'][:5], 1):
+                                        st.write(f"{i}. **{factor['type']}:** {factor['description']}")
                             
-                            # Tab'lar oluştur
-                            tab1, tab2, tab3, tab4 = st.tabs(["📊 Fiyat Grafiği", "🕯️ Candlestick", "📈 Teknik Göstergeler", "📰 Haber Analizi"])
+                            # Grafikler - Tabs ile organize edilmiş
+                            st.subheader("📈 Görselleştirmeler")
+                            
+                            if not results['price_df'].empty:
+                                price_df = results['price_df']
+                                
+                                # Tab'lar oluştur
+                                tab1, tab2, tab3, tab4 = st.tabs(["📊 Fiyat Grafiği", "🕯️ Candlestick", "📈 Teknik Göstergeler", "📰 Haber Analizi"])
                             
                             with tab1:
                                 # Gelişmiş fiyat grafiği
@@ -780,8 +777,96 @@ if page == "🏠 Ana Sayfa - Analiz":
                                 else:
                                     st.info("Haber analizi için veri bulunamadı.")
                         
-                        # Haber listesi (ayrı bir bölüm)
-                        if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
+                        # TAB 3: Haberler & Rapor
+                        with tab_news_report:
+                            st.subheader("📰 Haberler & AI Raporu")
+                            
+                            # Gemini AI Analist Raporu (eğer varsa)
+                            if 'detailed_report' in results and results['detailed_report']:
+                                detailed_report = results['detailed_report']
+                                
+                                if detailed_report.get('gemini_analyst_report'):
+                                    st.subheader("🤖 AI Analist Raporu (Gemini)")
+                                    st.info("💡 Bu rapor, Gemini AI tarafından otomatik olarak oluşturulmuştur.")
+                                    st.markdown(detailed_report['gemini_analyst_report'])
+                                    
+                                    # Haber özetleri
+                                    if detailed_report.get('hisse_news_summary'):
+                                        with st.expander("📰 Hisse Bazlı Haber Özeti", expanded=True):
+                                            st.markdown(detailed_report['hisse_news_summary'])
+                                    
+                                    if detailed_report.get('piyasa_news_summary'):
+                                        with st.expander("🌐 Piyasa Geneli Haber Özeti", expanded=True):
+                                            st.markdown(detailed_report['piyasa_news_summary'])
+                                
+                                # En önemli haberler
+                                if detailed_report.get('news_analysis'):
+                                    st.subheader("📰 En Etkili Haberler")
+                                    for news in detailed_report['news_analysis'][:10]:
+                                        with st.container():
+                                            col1, col2 = st.columns([1, 4])
+                                            with col1:
+                                                st.write(f"{news.get('sentiment_emoji', '🟡')} **{news.get('sentiment', 'neutral').upper()}**")
+                                                st.caption(f"Etki: {news.get('impact', 'Orta')}")
+                                                st.caption(f"Güven: {news.get('confidence', 0.0):.1%}")
+                                            with col2:
+                                                st.write(f"**{news.get('title', 'Başlık yok')}**")
+                                                st.caption(f"📅 {news.get('date', 'Bilinmiyor')}")
+                                            st.divider()
+                            
+                            # Haber listesi
+                            if not results['news_df'].empty:
+                                st.subheader("📋 Tüm Haberler")
+                                # Sentiment filtreleme
+                                sentiment_filter = st.selectbox(
+                                    "Sentiment Filtresi",
+                                    ["Tümü", "Pozitif", "Negatif", "Nötr"],
+                                    key="news_sentiment_filter"
+                                )
+                                
+                                filtered_news = results['news_df'].copy()
+                                if sentiment_filter != "Tümü":
+                                    sentiment_map = {"Pozitif": "positive", "Negatif": "negative", "Nötr": "neutral"}
+                                    if 'sentiment' in filtered_news.columns:
+                                        filtered_news = filtered_news[filtered_news['sentiment'] == sentiment_map[sentiment_filter]]
+                                
+                                for idx, row in filtered_news.head(20).iterrows():
+                                    with st.expander(f"{row.get('sentiment_emoji', '🟡')} {row.get('title', 'Başlık yok')}", expanded=False):
+                                        st.write(f"**Özet:** {row.get('summary', 'Özet yok')}")
+                                        st.write(f"**Kaynak:** {row.get('source', 'Bilinmiyor')}")
+                                        st.write(f"**Tarih:** {row.get('published_at', 'Bilinmiyor')}")
+                                        if row.get('url'):
+                                            st.markdown(f"[🔗 Haberi Oku]({row['url']})")
+                                        sentiment_val = row.get('sentiment', 'neutral')
+                                        confidence_val = row.get('confidence', 0.0)
+                                        st.write(f"**Sentiment:** {sentiment_val.upper()} ({confidence_val:.1%} güven)")
+                        
+                        # TAB 4: Portföy
+                        with tab_portfolio:
+                            st.subheader("💼 Portföy Analizi")
+                            st.info("💡 Bu hisseyi portföyünüze eklemek için 'Portföy Optimizasyonu' sayfasını kullanın.")
+                            
+                            # Bu hisse için portföy önerisi (basit)
+                            if not results['price_df'].empty:
+                                price_df = results['price_df']
+                                current_price = price_df.iloc[-1]['close']
+                                
+                                st.metric("Mevcut Fiyat", f"${current_price:.2f}" if not ticker.endswith('.IS') else f"₺{current_price:.2f}")
+                                
+                                # Basit portföy önerisi
+                                if results['overall_score'] >= 70:
+                                    st.success("✅ Bu hisse portföyünüze eklenebilir (Yüksek skor)")
+                                elif results['overall_score'] < 30:
+                                    st.warning("⚠️ Bu hisse portföyünüze eklenmemeli (Düşük skor)")
+                                else:
+                                    st.info("ℹ️ Bu hisse portföyünüze eklenebilir (Orta skor)")
+                            
+                            # Portföy optimizasyonu linki
+                            st.markdown("---")
+                            st.markdown("**💡 İpucu:** Birden fazla hisse için portföy optimizasyonu yapmak için 'Portföy Optimizasyonu' sayfasına gidin.")
+                        
+                        # Haber listesi (ayrı bir bölüm - eski kod, artık tab_news_report içinde)
+                        if False and not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
                             news_df = results['news_df']
                             
                             with st.expander("📰 Tüm Haberler", expanded=False):

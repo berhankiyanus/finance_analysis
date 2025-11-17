@@ -50,10 +50,9 @@ jobs:
     name: Otomatik Model Yeniden Eğitimi
     runs-on: ubuntu-latest
     # Her Pazar gecesi 02:00 UTC'de çalış (cron: dakika saat gün ay hafta)
-    # schedule:
-    #   - cron: '0 2 * * 0'  # Her Pazar gecesi 02:00 UTC
-    # Manuel tetikleme için (şimdilik)
-    if: false  # Otomatik çalışmasını istemiyorsanız false yapın
+    schedule:
+      - cron: '0 2 * * 0'  # Her Pazar gecesi 02:00 UTC
+    # Manuel tetikleme için de çalışır (push/PR ile)
     
     steps:
     - name: Checkout code
