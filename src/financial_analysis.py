@@ -381,14 +381,23 @@ def detect_candlestick_patterns(open: pd.Series, high: pd.Series, low: pd.Series
     return patterns
 
 
-def compute_features(price_df: pd.DataFrame) -> pd.DataFrame:
+def compute_features(price_df: pd.DataFrame, 
+                    hisse_duygu_skoru: Optional[pd.Series] = None,
+                    piyasa_duygu_skoru: Optional[pd.Series] = None,
+                    faiz_orani: Optional[pd.Series] = None) -> pd.DataFrame:
     """
-    Fiyat verisinden feature'lar üretir.
+    Fiyat verisinden feature'lar üretir (teknik + duygu özellikleri).
     
     Parametreler:
     ------------
     price_df : pd.DataFrame
         'date', 'open', 'high', 'low', 'close', 'volume' kolonları olmalı
+    hisse_duygu_skoru : pd.Series, optional
+        Hisse bazlı duygu skoru (0-1 arası, tarih index'li)
+    piyasa_duygu_skoru : pd.Series, optional
+        Piyasa geneli duygu skoru (0-1 arası, tarih index'li)
+    faiz_orani : pd.Series, optional
+        Faiz oranı (tarih index'li)
     
     Döndürür:
     --------
@@ -536,6 +545,71 @@ def compute_features(price_df: pd.DataFrame) -> pd.DataFrame:
     # Fiyatın ortalamadan sapması (z-score)
     df['price_zscore_20'] = (df['close'] - df['ma_20']) / df['close'].rolling(20).std()
     df['price_zscore_50'] = (df['close'] - df['ma_50']) / df['close'].rolling(50).std()
+    
+    # === DUYGU VE MAKRO ÖZELLİKLERİ ===
+    
+    # Hisse duygu skoru (eğer verilmişse)
+    if hisse_duygu_skoru is not None:
+        # Tarih index'ini hizala
+        if isinstance(hisse_duygu_skoru, pd.Series):
+            # DataFrame'in tarih kolonuna veya index'ine göre hizala
+            if 'date' in df.columns:
+                df['hisse_duygu_skoru'] = df['date'].map(hisse_duygu_skoru).ffill()
+            elif df.index.dtype == 'datetime64[ns]':
+                df['hisse_duygu_skoru'] = df.index.to_series().map(hisse_duygu_skoru).ffill()
+            else:
+                df['hisse_duygu_skoru'] = hisse_duygu_skoru.reindex(df.index).ffill()
+            
+            # Hareketli ortalamalar
+            df['hisse_duygu_ma_3'] = df['hisse_duygu_skoru'].rolling(3).mean()
+            df['hisse_duygu_ma_7'] = df['hisse_duygu_skoru'].rolling(7).mean()
+            df['hisse_duygu_ma_14'] = df['hisse_duygu_skoru'].rolling(14).mean()
+            
+            # Trend (artış/azalış)
+            df['hisse_duygu_trend'] = df['hisse_duygu_skoru'].diff()
+    
+    # Piyasa duygu skoru (eğer verilmişse)
+    if piyasa_duygu_skoru is not None:
+        if isinstance(piyasa_duygu_skoru, pd.Series):
+            if 'date' in df.columns:
+                df['piyasa_duygu_skoru'] = df['date'].map(piyasa_duygu_skoru).ffill()
+            elif df.index.dtype == 'datetime64[ns]':
+                df['piyasa_duygu_skoru'] = df.index.to_series().map(piyasa_duygu_skoru).ffill()
+            else:
+                df['piyasa_duygu_skoru'] = piyasa_duygu_skoru.reindex(df.index).ffill()
+            
+            # Hareketli ortalamalar
+            df['piyasa_duygu_ma_3'] = df['piyasa_duygu_skoru'].rolling(3).mean()
+            df['piyasa_duygu_ma_7'] = df['piyasa_duygu_skoru'].rolling(7).mean()
+            df['piyasa_duygu_ma_14'] = df['piyasa_duygu_skoru'].rolling(14).mean()
+            
+            # Trend
+            df['piyasa_duygu_trend'] = df['piyasa_duygu_skoru'].diff()
+    
+    # Faiz oranı (eğer verilmişse)
+    if faiz_orani is not None:
+        if isinstance(faiz_orani, pd.Series):
+            if 'date' in df.columns:
+                df['faiz_orani'] = df['date'].map(faiz_orani).ffill()
+            elif df.index.dtype == 'datetime64[ns]':
+                df['faiz_orani'] = df.index.to_series().map(faiz_orani).ffill()
+            else:
+                df['faiz_orani'] = faiz_orani.reindex(df.index).ffill()
+            
+            # Faiz değişimi
+            df['faiz_degisim'] = df['faiz_orani'].diff()
+            
+            # Faiz vs fiyat korelasyonu (rolling)
+            df['faiz_fiyat_corr'] = df['close'].rolling(20).corr(df['faiz_orani'])
+    
+    # === DUYGU-FİYAT ETKİLEŞİMİ ===
+    # Hisse duygu ile fiyat getirisi korelasyonu
+    if 'hisse_duygu_skoru' in df.columns and 'daily_return' in df.columns:
+        df['duygu_getiri_corr'] = df['daily_return'].rolling(10).corr(df['hisse_duygu_skoru'])
+    
+    # Piyasa duygu ile fiyat getirisi korelasyonu
+    if 'piyasa_duygu_skoru' in df.columns and 'daily_return' in df.columns:
+        df['piyasa_duygu_getiri_corr'] = df['daily_return'].rolling(10).corr(df['piyasa_duygu_skoru'])
     
     return df
 
@@ -850,6 +924,32 @@ def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] =
         'pattern_bullish_engulfing': latest.get('pattern_bullish_engulfing', 0),
         'pattern_bearish_engulfing': latest.get('pattern_bearish_engulfing', 0),
     }
+    
+    # Duygu özellikleri (eğer varsa)
+    if 'hisse_duygu_skoru' in price_df.columns:
+        features['hisse_duygu_skoru'] = latest.get('hisse_duygu_skoru', 0.5)
+        features['hisse_duygu_ma_3'] = latest.get('hisse_duygu_ma_3', 0.5)
+        features['hisse_duygu_ma_7'] = latest.get('hisse_duygu_ma_7', 0.5)
+        features['hisse_duygu_ma_14'] = latest.get('hisse_duygu_ma_14', 0.5)
+        features['hisse_duygu_trend'] = latest.get('hisse_duygu_trend', 0)
+    
+    if 'piyasa_duygu_skoru' in price_df.columns:
+        features['piyasa_duygu_skoru'] = latest.get('piyasa_duygu_skoru', 0.5)
+        features['piyasa_duygu_ma_3'] = latest.get('piyasa_duygu_ma_3', 0.5)
+        features['piyasa_duygu_ma_7'] = latest.get('piyasa_duygu_ma_7', 0.5)
+        features['piyasa_duygu_ma_14'] = latest.get('piyasa_duygu_ma_14', 0.5)
+        features['piyasa_duygu_trend'] = latest.get('piyasa_duygu_trend', 0)
+    
+    if 'faiz_orani' in price_df.columns:
+        features['faiz_orani'] = latest.get('faiz_orani', 0)
+        features['faiz_degisim'] = latest.get('faiz_degisim', 0)
+        features['faiz_fiyat_corr'] = latest.get('faiz_fiyat_corr', 0)
+    
+    if 'duygu_getiri_corr' in price_df.columns:
+        features['duygu_getiri_corr'] = latest.get('duygu_getiri_corr', 0)
+    
+    if 'piyasa_duygu_getiri_corr' in price_df.columns:
+        features['piyasa_duygu_getiri_corr'] = latest.get('piyasa_duygu_getiri_corr', 0)
     
     # Zaman tabanlı features (eğer varsa)
     if 'day_of_week' in price_df.columns:

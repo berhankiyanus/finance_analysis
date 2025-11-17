@@ -23,10 +23,31 @@ xgboost>=2.0.0
 # Model Açıklanabilirliği (XAI)
 shap>=0.43.0
 
-# API ve Web Framework (Opsiyonel)
-fastapi>=0.100.0
-uvicorn>=0.23.0
+# LightGBM
+lightgbm>=4.0.0
+
+# Backtesting
+backtesting>=0.3.3
+
+# Portföy Optimizasyonu
+PyPortfolioOpt>=1.5.4
+
+# Firestore (Google Cloud)
+google-cloud-firestore>=2.11.0
+
+# FastAPI
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 pydantic>=2.0.0
+
+# MLflow
+mlflow>=2.8.0
+
+# Data Drift Monitoring
+evidently>=0.4.0
+
+# Web Scraping (KAP için)
+lxml>=4.9.0
 
 # Görselleştirme (Web uygulaması için gerekli)
 matplotlib>=3.7.0

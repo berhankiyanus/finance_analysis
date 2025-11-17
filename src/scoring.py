@@ -5,14 +5,17 @@ Bu modül, sentiment ve finansal skorları birleştirerek genel durum skoru üre
 ve Türkçe rapor oluşturur.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 try:
     from .financial_analysis import compute_financial_score, create_feature_vector
     from .sentiment_analysis import aggregate_sentiment
+    from .gemini_reporting import generate_analyst_report, summarize_news_headlines
 except ImportError:
     from src.financial_analysis import compute_financial_score, create_feature_vector
     from src.sentiment_analysis import aggregate_sentiment
+    from src.gemini_reporting import generate_analyst_report, summarize_news_headlines
 import pandas as pd
+import os
 
 
 def compute_overall_score(
@@ -558,6 +561,93 @@ def generate_detailed_report(
     summary_parts.append("⚠️ **ÖNEMLİ UYARI:** Bu rapor sadece eğitim ve araştırma amaçlıdır. Yatırım tavsiyesi değildir. Yatırım kararlarınızı kendi araştırmanız ve uzman görüşü ile alın.")
     
     report['summary'] = '\n'.join(summary_parts)
+    
+    # Gemini API ile otomatik analist raporu (eğer isteniyorsa)
+    if use_gemini:
+        try:
+            # Gemini modeli yükle
+            try:
+                import google.generativeai as genai
+                gemini_api_key = os.getenv('GEMINI_API_KEY')
+                if gemini_api_key:
+                    genai.configure(api_key=gemini_api_key)
+                    gemini_model = genai.GenerativeModel('gemini-pro')
+                    
+                    # Top feature'ları al (SHAP değerleri varsa)
+                    top_features = []
+                    if 'shap_values' in feature_vector:
+                        shap_dict = feature_vector['shap_values']
+                        top_features = sorted(shap_dict.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
+                    else:
+                        # Feature importance'dan al
+                        top_features = sorted(feature_vector.items(), key=lambda x: abs(x[1]) if isinstance(x[1], (int, float)) else 0, reverse=True)[:5]
+                    
+                    # Hisse bazlı haber özeti
+                    hisse_news = []
+                    piyasa_news = []
+                    if not news_df.empty:
+                        # Makro/mikro sınıflandırması varsa kullan
+                        if 'news_context' in news_df.columns:
+                            hisse_news = news_df[news_df['news_context'] == 'Hisse Bazlı'].to_dict('records')
+                            piyasa_news = news_df[news_df['news_context'] == 'Piyasa Geneli'].to_dict('records')
+                        else:
+                            # Yoksa tüm haberleri hisse bazlı say
+                            hisse_news = news_df.to_dict('records')
+                    
+                    # Haber özetleri
+                    hisse_news_summary = summarize_news_headlines(
+                        [{'title': n.get('title', ''), 'summary': n.get('summary', ''), 'sentiment': n.get('sentiment_class', 'neutral')} 
+                         for n in hisse_news[:10]],
+                        gemini_model=gemini_model
+                    ) if hisse_news else "Hisse bazlı önemli haber bulunamadı."
+                    
+                    piyasa_news_summary = summarize_news_headlines(
+                        [{'title': n.get('title', ''), 'summary': n.get('summary', ''), 'sentiment': n.get('sentiment_class', 'neutral')} 
+                         for n in piyasa_news[:10]],
+                        gemini_model=gemini_model
+                    ) if piyasa_news else "Piyasa geneli önemli haber bulunamadı."
+                    
+                    # Hisse sentiment skoru (0-1 arası)
+                    if hisse_news:
+                        hisse_sentiment = sum(n.get('sentiment_score', 0) for n in hisse_news) / len(hisse_news)
+                        hisse_sentiment = (hisse_sentiment + 1) / 2  # -1/+1'den 0-1'e normalize et
+                    else:
+                        hisse_sentiment = 0.5
+                    
+                    # Piyasa sentiment skoru
+                    if piyasa_news:
+                        piyasa_sentiment = sum(n.get('sentiment_score', 0) for n in piyasa_news) / len(piyasa_news)
+                        piyasa_sentiment = (piyasa_sentiment + 1) / 2
+                    else:
+                        piyasa_sentiment = 0.5
+                    
+                    # Teknik sinyal
+                    direction_map = {'up': 'AL', 'down': 'SAT', 'neutral': 'TUT'}
+                    technical_signal = direction_map.get(direction_prediction.get('direction', 'neutral'), 'TUT')
+                    
+                    # Gemini raporu oluştur
+                    gemini_report = generate_analyst_report(
+                        company_name=company_name,
+                        ticker=ticker,
+                        technical_signal=technical_signal,
+                        top_features=top_features,
+                        hisse_sentiment_score=hisse_sentiment,
+                        hisse_news_summary=hisse_news_summary,
+                        piyasa_sentiment_score=piyasa_sentiment,
+                        piyasa_news_summary=piyasa_news_summary,
+                        gemini_model=gemini_model
+                    )
+                    
+                    report['gemini_analyst_report'] = gemini_report
+                    report['hisse_news_summary'] = hisse_news_summary
+                    report['piyasa_news_summary'] = piyasa_news_summary
+                    
+            except ImportError:
+                pass  # Gemini yüklü değil
+            except Exception as e:
+                print(f"⚠️  Gemini rapor oluşturma hatası: {e}")
+        except Exception as e:
+            print(f"⚠️  Gemini entegrasyonu hatası: {e}")
     
     return report
 

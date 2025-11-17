@@ -15,10 +15,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 try:
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, RandomForestRegressor, GradientBoostingRegressor
+    from sklearn.linear_model import LogisticRegression, LinearRegression
     from sklearn.model_selection import TimeSeriesSplit
-    from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+    from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, mean_squared_error, r2_score
     from sklearn.preprocessing import StandardScaler, LabelEncoder
     import xgboost as xgb
     SKLEARN_AVAILABLE = True
@@ -26,27 +26,38 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     print("⚠️  scikit-learn yüklü değil. ML modelleri kullanılamayacak.")
 
+try:
+    import lightgbm as lgb
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    print("⚠️  LightGBM yüklü değil. LightGBM modelleri kullanılamayacak.")
+
 
 class PriceDirectionPredictor:
     """
     Fiyat yönü tahmini için ML modeli sınıfı.
     """
     
-    def __init__(self, model_type: str = "random_forest", model_path: Optional[str] = None):
+    def __init__(self, model_type: str = "random_forest", model_path: Optional[str] = None, 
+                 task_type: str = "classification"):
         """
         Model oluşturur veya kaydedilmiş modeli yükler.
         
         Parametreler:
         ------------
         model_type : str
-            Model tipi: 'random_forest', 'xgboost', 'gradient_boosting', 'logistic'
+            Model tipi: 'random_forest', 'xgboost', 'lightgbm', 'gradient_boosting', 'logistic'
         model_path : str, optional
             Kaydedilmiş model dosyası yolu
+        task_type : str
+            Görev tipi: 'classification' (yön tahmini) veya 'regression' (getiri tahmini)
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn yüklü değil. 'pip install scikit-learn xgboost' komutu ile yükleyin.")
         
         self.model_type = model_type
+        self.task_type = task_type  # 'classification' veya 'regression'
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
         self.model = None
@@ -59,39 +70,91 @@ class PriceDirectionPredictor:
             self._create_model()
     
     def _create_model(self):
-        """Model oluşturur."""
-        if self.model_type == "random_forest":
-            self.model = RandomForestClassifier(
-                n_estimators=100,
-                max_depth=10,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                random_state=42,
-                n_jobs=-1
-            )
-        elif self.model_type == "xgboost":
-            self.model = xgb.XGBClassifier(
-                n_estimators=100,
-                max_depth=6,
-                learning_rate=0.1,
-                random_state=42,
-                eval_metric='mlogloss'
-            )
-        elif self.model_type == "gradient_boosting":
-            self.model = GradientBoostingClassifier(
-                n_estimators=100,
-                max_depth=5,
-                learning_rate=0.1,
-                random_state=42
-            )
-        elif self.model_type == "logistic":
-            self.model = LogisticRegression(
-                max_iter=1000,
-                random_state=42,
-                multi_class='multinomial'
-            )
+        """Model oluşturur (classification veya regression)."""
+        if self.task_type == "classification":
+            if self.model_type == "random_forest":
+                self.model = RandomForestClassifier(
+                    n_estimators=100,
+                    max_depth=10,
+                    min_samples_split=5,
+                    min_samples_leaf=2,
+                    random_state=42,
+                    n_jobs=-1
+                )
+            elif self.model_type == "xgboost":
+                self.model = xgb.XGBClassifier(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42,
+                    eval_metric='mlogloss'
+                )
+            elif self.model_type == "lightgbm":
+                if not LIGHTGBM_AVAILABLE:
+                    raise ImportError("LightGBM yüklü değil. 'pip install lightgbm' komutu ile yükleyin.")
+                self.model = lgb.LGBMClassifier(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42,
+                    verbose=-1
+                )
+            elif self.model_type == "gradient_boosting":
+                self.model = GradientBoostingClassifier(
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=42
+                )
+            elif self.model_type == "logistic":
+                self.model = LogisticRegression(
+                    max_iter=1000,
+                    random_state=42,
+                    multi_class='multinomial'
+                )
+            else:
+                raise ValueError(f"Bilinmeyen model tipi: {self.model_type}")
+        
+        elif self.task_type == "regression":
+            if self.model_type == "random_forest":
+                self.model = RandomForestRegressor(
+                    n_estimators=100,
+                    max_depth=10,
+                    min_samples_split=5,
+                    min_samples_leaf=2,
+                    random_state=42,
+                    n_jobs=-1
+                )
+            elif self.model_type == "xgboost":
+                self.model = xgb.XGBRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42
+                )
+            elif self.model_type == "lightgbm":
+                if not LIGHTGBM_AVAILABLE:
+                    raise ImportError("LightGBM yüklü değil. 'pip install lightgbm' komutu ile yükleyin.")
+                self.model = lgb.LGBMRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42,
+                    verbose=-1
+                )
+            elif self.model_type == "gradient_boosting":
+                self.model = GradientBoostingRegressor(
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=42
+                )
+            elif self.model_type == "logistic":
+                self.model = LinearRegression()
+            else:
+                raise ValueError(f"Bilinmeyen model tipi: {self.model_type}")
         else:
-            raise ValueError(f"Bilinmeyen model tipi: {self.model_type}")
+            raise ValueError(f"Bilinmeyen görev tipi: {self.task_type}")
     
     def prepare_training_data(
         self,
@@ -160,18 +223,27 @@ class PriceDirectionPredictor:
             feature_vector = [features.get(name, 0) for name in feature_names]
             X_list.append(feature_vector)
             
-            # Hedef değişkeni hesapla (gelecek fiyat yönü)
+            # Hedef değişkeni hesapla
             current_price = price_df.iloc[i]['close']
-            future_price = price_df.iloc[i + future_days]['close']
-            return_pct = (future_price / current_price - 1) * 100
+            future_prices = price_df.iloc[i+1:i+future_days+1]['close']
             
-            # Yön sınıflandırması
-            if return_pct > 2.0:  # %2'den fazla artış
-                y_list.append('up')
-            elif return_pct < -2.0:  # %2'den fazla düşüş
-                y_list.append('down')
-            else:  # Yatay
-                y_list.append('neutral')
+            if self.task_type == "classification":
+                # Yön sınıflandırması
+                future_price = price_df.iloc[i + future_days]['close']
+                return_pct = (future_price / current_price - 1) * 100
+                
+                if return_pct > 2.0:  # %2'den fazla artış
+                    y_list.append('up')
+                elif return_pct < -2.0:  # %2'den fazla düşüş
+                    y_list.append('down')
+                else:  # Yatay
+                    y_list.append('neutral')
+            
+            elif self.task_type == "regression":
+                # Sonraki 5 gün içindeki maksimum getiri (next_5_day_max_return)
+                max_future_price = future_prices.max()
+                max_return_pct = (max_future_price / current_price - 1) * 100
+                y_list.append(max_return_pct)
         
         X = np.array(X_list)
         y = np.array(y_list)
@@ -230,13 +302,19 @@ class PriceDirectionPredictor:
         X_val_scaled = self.scaler.transform(X_val) if n_val > 0 else None
         X_test_scaled = self.scaler.transform(X_test)
         
-        # Label encoding: String değerleri sayısal değerlere dönüştür
-        y_train_encoded = self.label_encoder.fit_transform(y_train)
-        y_val_encoded = self.label_encoder.transform(y_val) if n_val > 0 else None
-        y_test_encoded = self.label_encoder.transform(y_test)
+        # Label encoding: Sadece classification için gerekli
+        if self.task_type == "classification":
+            y_train_encoded = self.label_encoder.fit_transform(y_train)
+            y_val_encoded = self.label_encoder.transform(y_val) if n_val > 0 else None
+            y_test_encoded = self.label_encoder.transform(y_test)
+        else:
+            # Regression için encoding gerekmez
+            y_train_encoded = y_train
+            y_val_encoded = y_val if n_val > 0 else None
+            y_test_encoded = y_test
         
         # Modeli eğit
-        print(f"📚 Model eğitiliyor ({self.model_type})...")
+        print(f"📚 Model eğitiliyor ({self.model_type}, {self.task_type})...")
         print(f"   Train seti: {len(X_train)} örnek")
         if n_val > 0:
             print(f"   Validation seti: {len(X_val)} örnek")
@@ -245,39 +323,85 @@ class PriceDirectionPredictor:
         self.model.fit(X_train_scaled, y_train_encoded)
         self.is_trained = True
         
-        # Değerlendirme (tahminleri decode et)
-        train_pred_encoded = self.model.predict(X_train_scaled)
-        train_pred = self.label_encoder.inverse_transform(train_pred_encoded)
-        train_acc = accuracy_score(y_train, train_pred)
+        # Değerlendirme
+        if self.task_type == "classification":
+            # Classification metrikleri
+            train_pred_encoded = self.model.predict(X_train_scaled)
+            train_pred = self.label_encoder.inverse_transform(train_pred_encoded)
+            train_acc = accuracy_score(y_train, train_pred)
+            
+            val_acc = None
+            if X_val_scaled is not None:
+                val_pred_encoded = self.model.predict(X_val_scaled)
+                val_pred = self.label_encoder.inverse_transform(val_pred_encoded)
+                val_acc = accuracy_score(y_val, val_pred)
+            
+            test_pred_encoded = self.model.predict(X_test_scaled)
+            test_pred = self.label_encoder.inverse_transform(test_pred_encoded)
+            test_acc = accuracy_score(y_test, test_pred)
+            
+            # Sonuçları topla
+            results = {
+                'train_accuracy': train_acc,
+                'validation_accuracy': val_acc,
+                'test_accuracy': test_acc,
+                'train_predictions': train_pred,
+                'test_predictions': test_pred,
+                'y_train': y_train,
+                'y_test': y_test,
+                'classification_report': classification_report(y_test, test_pred, output_dict=True),
+                'confusion_matrix': confusion_matrix(y_test, test_pred).tolist()
+            }
         
-        val_acc = None
-        if X_val_scaled is not None:
-            val_pred_encoded = self.model.predict(X_val_scaled)
-            val_pred = self.label_encoder.inverse_transform(val_pred_encoded)
-            val_acc = accuracy_score(y_val, val_pred)
-        
-        test_pred_encoded = self.model.predict(X_test_scaled)
-        test_pred = self.label_encoder.inverse_transform(test_pred_encoded)
-        test_acc = accuracy_score(y_test, test_pred)
-        
-        # Sonuçları topla
-        results = {
-            'train_accuracy': train_acc,
-            'validation_accuracy': val_acc,
-            'test_accuracy': test_acc,
-            'train_predictions': train_pred,
-            'test_predictions': test_pred,
-            'y_train': y_train,
-            'y_test': y_test,
-            'classification_report': classification_report(y_test, test_pred, output_dict=True),
-            'confusion_matrix': confusion_matrix(y_test, test_pred).tolist()
-        }
+        else:
+            # Regression metrikleri
+            train_pred = self.model.predict(X_train_scaled)
+            train_mse = mean_squared_error(y_train, train_pred)
+            train_r2 = r2_score(y_train, train_pred)
+            train_rmse = np.sqrt(train_mse)
+            
+            val_mse = None
+            val_r2 = None
+            val_rmse = None
+            if X_val_scaled is not None:
+                val_pred = self.model.predict(X_val_scaled)
+                val_mse = mean_squared_error(y_val, val_pred)
+                val_r2 = r2_score(y_val, val_pred)
+                val_rmse = np.sqrt(val_mse)
+            
+            test_pred = self.model.predict(X_test_scaled)
+            test_mse = mean_squared_error(y_test, test_pred)
+            test_r2 = r2_score(y_test, test_pred)
+            test_rmse = np.sqrt(test_mse)
+            
+            # Sonuçları topla
+            results = {
+                'train_mse': train_mse,
+                'train_rmse': train_rmse,
+                'train_r2': train_r2,
+                'validation_mse': val_mse,
+                'validation_rmse': val_rmse,
+                'validation_r2': val_r2,
+                'test_mse': test_mse,
+                'test_rmse': test_rmse,
+                'test_r2': test_r2,
+                'train_predictions': train_pred,
+                'test_predictions': test_pred,
+                'y_train': y_train,
+                'y_test': y_test
+            }
         
         print(f"\n✅ Eğitim tamamlandı!")
-        print(f"   Train Accuracy: {train_acc:.2%}")
-        if val_acc:
-            print(f"   Validation Accuracy: {val_acc:.2%}")
-        print(f"   Test Accuracy: {test_acc:.2%}")
+        if self.task_type == "classification":
+            print(f"   Train Accuracy: {results['train_accuracy']:.2%}")
+            if results.get('validation_accuracy'):
+                print(f"   Validation Accuracy: {results['validation_accuracy']:.2%}")
+            print(f"   Test Accuracy: {results['test_accuracy']:.2%}")
+        else:
+            print(f"   Train RMSE: {results['train_rmse']:.4f}, R²: {results['train_r2']:.4f}")
+            if results.get('validation_rmse'):
+                print(f"   Validation RMSE: {results['validation_rmse']:.4f}, R²: {results['validation_r2']:.4f}")
+            print(f"   Test RMSE: {results['test_rmse']:.4f}, R²: {results['test_r2']:.4f}")
         
         return results
     
@@ -293,9 +417,8 @@ class PriceDirectionPredictor:
         Döndürür:
         --------
         dict
-            'direction': 'up', 'down', veya 'neutral'
-            'probabilities': Her sınıf için olasılık
-            'confidence': En yüksek olasılık
+            Classification için: 'direction', 'probabilities', 'confidence'
+            Regression için: 'predicted_return', 'predicted_value'
         """
         
         if not self.is_trained:
@@ -310,23 +433,33 @@ class PriceDirectionPredictor:
         # Normalize et
         X_scaled = self.scaler.transform(X)
         
-        # Tahmin yap
-        prediction_encoded = self.model.predict(X_scaled)[0]
-        probabilities = self.model.predict_proba(X_scaled)[0]
+        if self.task_type == "classification":
+            # Classification tahmini
+            prediction_encoded = self.model.predict(X_scaled)[0]
+            probabilities = self.model.predict_proba(X_scaled)[0]
+            
+            # Tahmini decode et (sayısal değerden string'e)
+            prediction = self.label_encoder.inverse_transform([prediction_encoded])[0]
+            
+            # Sınıf isimlerini decode et
+            class_names = self.label_encoder.inverse_transform(self.model.classes_)
+            prob_dict = {class_name: float(prob) for class_name, prob in zip(class_names, probabilities)}
+            confidence = float(max(probabilities))
+            
+            return {
+                'direction': prediction,
+                'probabilities': prob_dict,
+                'confidence': confidence
+            }
         
-        # Tahmini decode et (sayısal değerden string'e)
-        prediction = self.label_encoder.inverse_transform([prediction_encoded])[0]
-        
-        # Sınıf isimlerini decode et
-        class_names = self.label_encoder.inverse_transform(self.model.classes_)
-        prob_dict = {class_name: float(prob) for class_name, prob in zip(class_names, probabilities)}
-        confidence = float(max(probabilities))
-        
-        return {
-            'direction': prediction,
-            'probabilities': prob_dict,
-            'confidence': confidence
-        }
+        else:
+            # Regression tahmini
+            predicted_value = self.model.predict(X_scaled)[0]
+            
+            return {
+                'predicted_return': float(predicted_value),  # Yüzde getiri
+                'predicted_value': float(predicted_value)
+            }
     
     def get_feature_importance(self) -> pd.DataFrame:
         """
@@ -404,32 +537,42 @@ class PriceDirectionPredictor:
         # SHAP explainer oluştur
         try:
             # Tree-based modeller için TreeExplainer
-            if self.model_type in ['random_forest', 'xgboost', 'gradient_boosting']:
+            if self.model_type in ['random_forest', 'xgboost', 'lightgbm', 'gradient_boosting']:
                 explainer = shap.TreeExplainer(self.model)
                 shap_values = explainer.shap_values(X_scaled)
                 
-                # Multi-class için en yüksek sınıfın SHAP değerlerini al
-                if isinstance(shap_values, list):
-                    # En yüksek olasılıklı sınıfı bul
-                    prediction = self.model.predict(X_scaled)[0]
-                    class_idx = list(self.model.classes_).index(prediction)
-                    shap_values = shap_values[class_idx]
-                
-                shap_values = shap_values[0]  # İlk örnek
+                if self.task_type == "classification":
+                    # Multi-class için en yüksek sınıfın SHAP değerlerini al
+                    if isinstance(shap_values, list):
+                        # En yüksek olasılıklı sınıfı bul
+                        prediction = self.model.predict(X_scaled)[0]
+                        class_idx = list(self.model.classes_).index(prediction)
+                        shap_values = shap_values[class_idx]
+                    
+                    shap_values = shap_values[0]  # İlk örnek
+                else:
+                    # Regression için direkt kullan
+                    shap_values = shap_values[0] if len(shap_values.shape) > 1 else shap_values
             else:
                 # Diğer modeller için KernelExplainer
+                if self.task_type == "classification":
+                    predict_func = self.model.predict_proba
+                else:
+                    predict_func = self.model.predict
+                
                 explainer = shap.KernelExplainer(
-                    self.model.predict_proba,
+                    predict_func,
                     background,
                     max_evals=max_evals
                 )
                 shap_values = explainer.shap_values(X_scaled[0])
                 
-                # En yüksek olasılıklı sınıf için SHAP değerleri
-                if isinstance(shap_values, list):
-                    prediction = self.model.predict(X_scaled)[0]
-                    class_idx = list(self.model.classes_).index(prediction)
-                    shap_values = shap_values[class_idx]
+                if self.task_type == "classification":
+                    # En yüksek olasılıklı sınıf için SHAP değerleri
+                    if isinstance(shap_values, list):
+                        prediction = self.model.predict(X_scaled)[0]
+                        class_idx = list(self.model.classes_).index(prediction)
+                        shap_values = shap_values[class_idx]
         except Exception as e:
             print(f"⚠️  SHAP hesaplama hatası: {e}")
             # Fallback: Feature importance kullan

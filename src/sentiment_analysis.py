@@ -528,9 +528,173 @@ def aggregate_sentiment(news_df: pd.DataFrame) -> float:
     return normalized_score
 
 
-def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = None) -> pd.DataFrame:
+def classify_news_context_and_sentiment(
+    title: str,
+    content: str,
+    company_name: Optional[str] = None,
+    ticker: Optional[str] = None,
+    gemini_model=None
+) -> Dict:
     """
-    Haber DataFrame'ine sentiment analizi uygular.
+    Haberi "Piyasa Geneli" veya "Hisse Bazlı" olarak sınıflandırır ve duygusunu belirler.
+    
+    Parametreler:
+    ------------
+    title : str
+        Haber başlığı
+    content : str
+        Haber içeriği (veya özet)
+    company_name : str, optional
+        Şirket adı (hisse bazlı analiz için)
+    ticker : str, optional
+        Borsa kodu (hisse bazlı analiz için)
+    gemini_model
+        Gemini API modeli (eğer varsa)
+    
+    Döndürür:
+    --------
+    dict
+        {
+            'baglam': 'Piyasa Geneli' veya 'Hisse Bazlı',
+            'duygu': 'Pozitif', 'Negatif' veya 'Nötr',
+            'confidence': 0-1 arası güven skoru
+        }
+    """
+    
+    # Gemini API kullan
+    if gemini_model:
+        try:
+            news_text = f"{title}\n\n{content[:1000]}"  # İlk 1000 karakter
+            
+            prompt = f"""Sen bir kıdemli finansal analistsin ve Türkiye piyasaları konusunda uzmansın. 
+Sana bir haber başlığı ve metni vereceğim. Görevin, bu haberin finansal etkisini iki kategoride değerlendirmek:
+
+Bağlam: Bu haber 'Piyasa Geneli' (BIST100, ekonomi, faiz, politika, genel piyasa trendleri) için mi, 
+yoksa 'Hisse Bazlı' (sadece belirli bir şirketle ilgili) mi?
+
+Duygu: Bu bağlamda, haberin tonu 'Pozitif', 'Negatif' veya 'Nötr' mü?
+
+ÖRNEKLER:
+- 'TCMB faiz artırımına gitti' → Bağlam: Piyasa Geneli, Duygu: Negatif (bankalar hariç)
+- 'X Şirketi rekor kâr açıkladı' → Bağlam: Hisse Bazlı, Duygu: Pozitif
+- 'BIST100 endeksi yükseldi' → Bağlam: Piyasa Geneli, Duygu: Pozitif
+- 'THYAO yeni uçak siparişi verdi' → Bağlam: Hisse Bazlı, Duygu: Pozitif
+
+ŞİRKET BİLGİSİ:
+{f"Şirket: {company_name}" if company_name else ""}
+{f"Ticker: {ticker}" if ticker else ""}
+
+HABER:
+{news_text}
+
+Çıktıyı SADECE şu JSON formatında ver:
+{{
+    "baglam": "Piyasa Geneli" veya "Hisse Bazlı",
+    "duygu": "Pozitif" veya "Negatif" veya "Nötr",
+    "confidence": 0.0 ile 1.0 arası güven skoru,
+    "reason": "Kısa açıklama (Türkçe, 1 cümle)"
+}}
+
+SADECE JSON yanıt ver, başka hiçbir şey yazma."""
+            
+            response = gemini_model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # JSON'u extract et
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            result = json.loads(response_text)
+            
+            return {
+                'baglam': result.get('baglam', 'Piyasa Geneli'),
+                'duygu': result.get('duygu', 'Nötr'),
+                'confidence': float(result.get('confidence', 0.5)),
+                'reason': result.get('reason', '')
+            }
+            
+        except Exception as e:
+            print(f"⚠️  Gemini context/sentiment analizi hatası: {e}")
+            # Fallback: Basit kural tabanlı
+            return _classify_with_rules(title, content, company_name, ticker)
+    else:
+        # Gemini yoksa kural tabanlı
+        return _classify_with_rules(title, content, company_name, ticker)
+
+
+def _classify_with_rules(
+    title: str,
+    content: str,
+    company_name: Optional[str] = None,
+    ticker: Optional[str] = None
+) -> Dict:
+    """
+    Kural tabanlı basit sınıflandırma (Gemini yoksa).
+    """
+    text = f"{title} {content}".lower()
+    
+    # Piyasa geneli anahtar kelimeleri
+    macro_keywords = [
+        'tcmb', 'faiz', 'enflasyon', 'bist100', 'bist 100', 'endeks',
+        'piyasa', 'ekonomi', 'politika', 'merkez bankası', 'döviz',
+        'dolar', 'euro', 'altın', 'petrol', 'borsa', 'genel'
+    ]
+    
+    # Hisse bazlı anahtar kelimeleri
+    micro_keywords = [
+        'şirket', 'hisse', 'senedi', 'hisse senedi', 'hissedar',
+        'kâr', 'zarar', 'gelir', 'satış', 'üretim', 'fabrika',
+        'yönetim', 'ceo', 'genel müdür', 'yönetim kurulu'
+    ]
+    
+    macro_count = sum(1 for keyword in macro_keywords if keyword in text)
+    micro_count = sum(1 for keyword in micro_keywords if keyword in text)
+    
+    # Şirket adı veya ticker geçiyorsa hisse bazlı
+    if company_name and company_name.lower() in text:
+        micro_count += 2
+    if ticker and ticker.lower() in text:
+        micro_count += 2
+    
+    # Bağlam belirleme
+    if micro_count > macro_count:
+        baglam = 'Hisse Bazlı'
+    else:
+        baglam = 'Piyasa Geneli'
+    
+    # Duygu belirleme (basit)
+    positive_words = ['yükseldi', 'arttı', 'büyüme', 'kâr', 'başarı', 'rekor', 'iyi', 'pozitif']
+    negative_words = ['düştü', 'azaldı', 'zarar', 'kayıp', 'kriz', 'düşüş', 'kötü', 'negatif']
+    
+    pos_count = sum(1 for word in positive_words if word in text)
+    neg_count = sum(1 for word in negative_words if word in text)
+    
+    if pos_count > neg_count:
+        duygu = 'Pozitif'
+    elif neg_count > pos_count:
+        duygu = 'Negatif'
+    else:
+        duygu = 'Nötr'
+    
+    return {
+        'baglam': baglam,
+        'duygu': duygu,
+        'confidence': 0.6,  # Kural tabanlı için düşük güven
+        'reason': f'Kural tabanlı analiz: {baglam} ({duygu})'
+    }
+
+
+def analyze_news_sentiment(
+    news_df: pd.DataFrame, 
+    analyzer: SentimentAnalyzer = None,
+    company_name: Optional[str] = None,
+    ticker: Optional[str] = None,
+    use_context_classification: bool = True
+) -> pd.DataFrame:
+    """
+    Haber DataFrame'ine sentiment analizi uygular (makro/mikro sınıflandırma ile).
     
     Parametreler:
     ------------
@@ -538,11 +702,17 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
         'title' ve 'summary' kolonları olmalı
     analyzer : SentimentAnalyzer, optional
         Eğer verilmezse yeni bir tane oluşturulur
+    company_name : str, optional
+        Şirket adı (makro/mikro sınıflandırma için)
+    ticker : str, optional
+        Borsa kodu (makro/mikro sınıflandırma için)
+    use_context_classification : bool
+        Makro/mikro sınıflandırma yapılsın mı? (varsayılan: True)
     
     Döndürür:
     --------
     pd.DataFrame
-        Orijinal DataFrame + 'sentiment_class', 'sentiment_confidence', 'sentiment_score' kolonları
+        Orijinal DataFrame + sentiment kolonları + 'news_context', 'context_sentiment' kolonları
     """
     
     if analyzer is None:
@@ -558,7 +728,6 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
         content = str(row.get('content', '')).strip()
         
         # Metinleri birleştir (boş olanları atla)
-        # FinBERT modeli için daha uzun ve anlamlı metinler daha iyi sonuç verir
         text_parts = []
         
         # 1. Başlık (her zaman ekle)
@@ -571,9 +740,7 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
         
         # 3. İçerik (ilk 800 karakter - daha fazla context için)
         if content and len(content) > 50:
-            # İçeriğin ilk 800 karakterini al (model max 512 token alır ama daha fazla context iyidir)
             content_snippet = content[:800].strip()
-            # Eğer içerik özetten farklıysa ekle
             if content_snippet != summary:
                 text_parts.append(content_snippet)
         
@@ -594,11 +761,28 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
         # Skora çevir
         score = news_to_score(sentiment_result)
         
-        results.append({
+        result_dict = {
             'sentiment_class': sentiment_result['class'],
             'sentiment_confidence': sentiment_result['confidence'],
             'sentiment_score': score
-        })
+        }
+        
+        # Makro/Mikro sınıflandırma (eğer isteniyorsa)
+        if use_context_classification:
+            context_result = classify_news_context_and_sentiment(
+                title=title,
+                content=content or summary,
+                company_name=company_name,
+                ticker=ticker,
+                gemini_model=analyzer.gemini_model if hasattr(analyzer, 'gemini_model') else None
+            )
+            
+            result_dict['news_context'] = context_result['baglam']
+            result_dict['context_sentiment'] = context_result['duygu']
+            result_dict['context_confidence'] = context_result['confidence']
+            result_dict['context_reason'] = context_result.get('reason', '')
+        
+        results.append(result_dict)
     
     # Sonuçları DataFrame'e ekle
     sentiment_df = pd.DataFrame(results)
