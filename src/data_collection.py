@@ -754,12 +754,196 @@ def get_fundamentals(ticker: str) -> Optional[Dict]:
         return None
 
 
+def get_all_data_for_stock(
+    ticker: str,
+    company_name: str,
+    period: str = "1y",
+    days_back: int = 30,
+    include_kap: bool = True,
+    include_google_search: bool = True,
+    include_macro: bool = True
+) -> Dict:
+    """
+    Bir hisse senedi için tüm verileri toplayan "orkestra şefi" fonksiyonu.
+    
+    Bu fonksiyon, farklı veri kaynaklarından (yfinance, NewsAPI, KAP, Google Search, TCMB)
+    veri toplayıp birleştirir.
+    
+    Parametreler:
+    ------------
+    ticker : str
+        Borsa kodu (örn: "THYAO", "AAPL")
+    company_name : str
+        Şirket adı (örn: "Türk Hava Yolları", "Apple")
+    period : str
+        Fiyat verisi periyodu (varsayılan: "1y")
+    days_back : int
+        Kaç gün geriye gidilecek (haberler için, varsayılan: 30)
+    include_kap : bool
+        KAP verileri dahil edilsin mi? (varsayılan: True, sadece TR için)
+    include_google_search : bool
+        Google Search haberleri dahil edilsin mi? (varsayılan: True)
+    include_macro : bool
+        Makroekonomik veriler dahil edilsin mi? (varsayılan: True)
+    
+    Döndürür:
+    --------
+    dict
+        Tüm verileri içeren sözlük:
+        {
+            'price_df': pd.DataFrame,
+            'news_df': pd.DataFrame,
+            'fundamentals': dict,
+            'kap_reports': list,
+            'google_news': list,
+            'macro_data': dict
+        }
+    """
+    
+    print(f"\n{'='*60}")
+    print(f"📊 {company_name} ({ticker}) için veri toplama başlatılıyor...")
+    print(f"{'='*60}\n")
+    
+    results = {
+        'ticker': ticker,
+        'company_name': company_name,
+        'price_df': pd.DataFrame(),
+        'news_df': pd.DataFrame(),
+        'fundamentals': None,
+        'kap_reports': [],
+        'google_news': [],
+        'macro_data': {}
+    }
+    
+    # 1. Fiyat verileri (yfinance)
+    print("1️⃣  Fiyat verileri çekiliyor...")
+    try:
+        results['price_df'] = get_price_data(ticker, period=period)
+        if not results['price_df'].empty:
+            print(f"   ✅ {len(results['price_df'])} günlük fiyat verisi çekildi.")
+        else:
+            print("   ⚠️  Fiyat verisi bulunamadı.")
+    except Exception as e:
+        print(f"   ❌ Fiyat verisi çekilirken hata: {e}")
+    
+    # 2. Haberler (NewsAPI)
+    print("\n2️⃣  NewsAPI'den haberler çekiliyor...")
+    try:
+        results['news_df'] = get_news(company_name, days_back=days_back, ticker=ticker)
+        if not results['news_df'].empty:
+            print(f"   ✅ {len(results['news_df'])} haber bulundu.")
+        else:
+            print("   ⚠️  Haber bulunamadı.")
+    except Exception as e:
+        print(f"   ❌ Haber çekilirken hata: {e}")
+    
+    # 3. Finansal göstergeler (yfinance)
+    print("\n3️⃣  Finansal göstergeler çekiliyor...")
+    try:
+        results['fundamentals'] = get_fundamentals(ticker)
+        if results['fundamentals']:
+            print(f"   ✅ Finansal göstergeler çekildi.")
+        else:
+            print("   ⚠️  Finansal gösterge bulunamadı.")
+    except Exception as e:
+        print(f"   ❌ Finansal gösterge çekilirken hata: {e}")
+    
+    # 4. KAP raporları (sadece TR için)
+    if include_kap and (ticker.endswith('.IS') or len(ticker) == 5):
+        print("\n4️⃣  KAP raporları çekiliyor...")
+        try:
+            from .kap_scraper import get_kap_financial_reports
+        except ImportError:
+            from src.kap_scraper import get_kap_financial_reports
+        
+        try:
+            results['kap_reports'] = get_kap_financial_reports(ticker, limit=10)
+            if results['kap_reports']:
+                print(f"   ✅ {len(results['kap_reports'])} KAP raporu bulundu.")
+            else:
+                print("   ⚠️  KAP raporu bulunamadı.")
+        except Exception as e:
+            print(f"   ❌ KAP raporu çekilirken hata: {e}")
+    else:
+        print("\n4️⃣  KAP raporları atlandı (TR hissesi değil veya kapalı).")
+    
+    # 5. Google Search haberleri
+    if include_google_search:
+        print("\n5️⃣  Google Search'ten haberler çekiliyor...")
+        try:
+            from .google_search import search_market_news
+        except ImportError:
+            from src.google_search import search_market_news
+        
+        try:
+            # Hisse bazlı arama
+            stock_keywords = [ticker, company_name]
+            results['google_news'] = search_market_news(stock_keywords, num_results=10)
+            if results['google_news']:
+                print(f"   ✅ {len(results['google_news'])} Google haber bulundu.")
+            else:
+                print("   ⚠️  Google haber bulunamadı.")
+        except Exception as e:
+            print(f"   ❌ Google Search hatası: {e}")
+    else:
+        print("\n5️⃣  Google Search atlandı.")
+    
+    # 6. Makroekonomik veriler
+    if include_macro:
+        print("\n6️⃣  Makroekonomik veriler çekiliyor...")
+        try:
+            from .macro_data import get_macroeconomic_data
+        except ImportError:
+            from src.macro_data import get_macroeconomic_data
+        
+        try:
+            # Ülke belirle (ticker'a göre)
+            country = "TR" if (ticker.endswith('.IS') or len(ticker) == 5) else "US"
+            results['macro_data'] = get_macroeconomic_data(country=country)
+            if results['macro_data']:
+                print(f"   ✅ {len(results['macro_data'])} makro gösterge bulundu.")
+            else:
+                print("   ⚠️  Makro veri bulunamadı.")
+        except Exception as e:
+            print(f"   ❌ Makro veri çekilirken hata: {e}")
+    else:
+        print("\n6️⃣  Makroekonomik veriler atlandı.")
+    
+    # Özet
+    print(f"\n{'='*60}")
+    print("📊 Veri Toplama Özeti:")
+    print(f"   • Fiyat verisi: {'✅' if not results['price_df'].empty else '❌'}")
+    print(f"   • NewsAPI haberleri: {'✅' if not results['news_df'].empty else '❌'} ({len(results['news_df'])} haber)")
+    print(f"   • Finansal göstergeler: {'✅' if results['fundamentals'] else '❌'}")
+    print(f"   • KAP raporları: {'✅' if results['kap_reports'] else '❌'} ({len(results['kap_reports'])} rapor)")
+    print(f"   • Google haberleri: {'✅' if results['google_news'] else '❌'} ({len(results['google_news'])} haber)")
+    print(f"   • Makro veriler: {'✅' if results['macro_data'] else '❌'} ({len(results['macro_data'])} gösterge)")
+    print(f"{'='*60}\n")
+    
+    return results
+
+
 if __name__ == "__main__":
     # Test
     print("=== Veri Toplama Modülü Test ===\n")
     
+    # Orkestra şefi testi
+    print("🎯 Orkestra Şefi Fonksiyonu Testi:")
+    all_data = get_all_data_for_stock(
+        ticker="THYAO",
+        company_name="Türk Hava Yolları",
+        period="6mo",
+        days_back=30
+    )
+    print("\n✅ Tüm veriler toplandı!")
+    
+    # Ayrı testler
+    print("\n" + "="*60)
+    print("Ayrı Fonksiyon Testleri:")
+    print("="*60)
+    
     # Haber testi
-    print("1. Haber toplama testi:")
+    print("\n1. Haber toplama testi:")
     news_df = get_news("Apple", days_back=7)
     print(news_df.head())
     print()
