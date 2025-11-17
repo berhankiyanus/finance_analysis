@@ -9,12 +9,24 @@ Modeller başarıyla eğitildi:
 
 ## 🎯 Adım 2: FastAPI'yi Başlat
 
-**Yeni bir terminal penceresi açın** ve şu komutları çalıştırın:
+**Yeni bir terminal penceresi açın** ve şu komutlardan birini kullanın:
 
+### Yöntem 1: Otomatik Script (Önerilen)
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-source venv/bin/activate
+./BASLAT.sh
+```
+
+### Yöntem 2: Manuel
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate  # veya: source venv/bin/activate
 uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Not:** Eğer `uvicorn` komutu bulunamazsa:
+```bash
+pip install fastapi uvicorn[standard]
 ```
 
 **Beklenen çıktı:**
@@ -28,12 +40,24 @@ INFO:     Application startup complete.
 
 ## 🎯 Adım 3: Streamlit'i Başlat
 
-**Başka bir yeni terminal penceresi açın** ve şu komutları çalıştırın:
+**Başka bir yeni terminal penceresi açın** ve şu komutlardan birini kullanın:
 
+### Yöntem 1: Otomatik Script (Önerilen)
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-source venv/bin/activate
+./BASLAT_STREAMLIT.sh
+```
+
+### Yöntem 2: Manuel
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate  # veya: source venv/bin/activate
 streamlit run app.py
+```
+
+**Not:** Eğer `streamlit` komutu bulunamazsa:
+```bash
+pip install streamlit plotly
 ```
 
 **Beklenen çıktı:**
