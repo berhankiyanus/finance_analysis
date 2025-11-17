@@ -219,11 +219,15 @@ def analyze_sector_correlation(
                 # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
                 if 'date' in df.columns:
                     df = df.set_index('date')
-                    df.index = pd.to_datetime(df.index)
+                    df.index = pd.to_datetime(df.index, utc=False)
                 elif not isinstance(df.index, pd.DatetimeIndex):
-                    df.index = pd.to_datetime(df.index)
+                    df.index = pd.to_datetime(df.index, utc=False)
                 
-                # Tarihleri normalize et
+                # Timezone-aware ise UTC'ye çevir ve timezone'u kaldır
+                if hasattr(df.index, 'tz') and df.index.tz is not None:
+                    df.index = df.index.tz_convert('UTC').tz_localize(None)
+                
+                # Tarihleri normalize et (timezone olmadan)
                 df.index = df.index.normalize()
                 
                 # Close fiyatlarını al
@@ -245,9 +249,18 @@ def analyze_sector_correlation(
             return error_df
         
         # Tüm tarihleri birleştir
-        all_dates = set()
+        all_dates = []
         for ticker, series in price_data.items():
-            all_dates.update(series.index)
+            # Timezone-aware datetime'ları UTC'ye çevir veya timezone'u kaldır
+            dates = series.index
+            if hasattr(dates, 'tz') and dates.tz is not None:
+                # Timezone-aware ise UTC'ye çevir
+                dates = dates.tz_convert('UTC').tz_localize(None)
+            elif hasattr(dates[0], 'tzinfo') and dates[0].tzinfo is not None:
+                # Eğer datetime objeleri timezone-aware ise
+                dates = pd.to_datetime([d.replace(tzinfo=None) if hasattr(d, 'tzinfo') and d.tzinfo else d for d in dates])
+            
+            all_dates.extend(dates.tolist())
             print(f"   {ticker}: {len(series)} gün veri")
         
         if len(all_dates) == 0:
@@ -256,8 +269,9 @@ def analyze_sector_correlation(
             error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
-        # Yeni index oluştur
-        new_index = pd.DatetimeIndex(sorted(all_dates))
+        # Yeni index oluştur (timezone olmadan)
+        all_dates_unique = sorted(set(all_dates))
+        new_index = pd.DatetimeIndex(all_dates_unique)
         print(f"   Toplam {len(new_index)} benzersiz tarih")
         
         # DataFrame oluştur ve reindex et
