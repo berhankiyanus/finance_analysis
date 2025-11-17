@@ -8,7 +8,7 @@ source venv/bin/activate 2>/dev/null || . venv/bin/activate
 
 # Gerekli paketleri kontrol et ve yükle
 echo "📦 Paketler kontrol ediliyor..."
-pip install -q fastapi uvicorn[standard] streamlit requests pandas numpy scikit-learn yfinance python-dotenv 2>&1 | grep -v "already satisfied" | tail -3
+pip install -q fastapi "uvicorn[standard]" streamlit requests pandas numpy scikit-learn yfinance python-dotenv 2>&1 | grep -v "already satisfied" | tail -3
 
 # FastAPI'yi başlat
 echo ""
