@@ -216,9 +216,8 @@ def analyze_sector_correlation(
         if len(price_data) < 2:
             error_msg = f"Yeterli fiyat verisi bulunamadı (sadece {len(price_data)} hisse başarılı: {list(price_data.keys())})"
             print(f"⚠️  {error_msg}")
-            # Hata mesajını içeren özel DataFrame döndür
-            error_df = pd.DataFrame()
-            error_df.attrs = {'error': error_msg}
+            # Hata mesajını içeren özel DataFrame döndür (ilk satırda hata mesajı)
+            error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
         # Tüm tarihleri birleştir
@@ -230,8 +229,7 @@ def analyze_sector_correlation(
         if len(all_dates) == 0:
             error_msg = "Hiç tarih bulunamadı"
             print(f"⚠️  {error_msg}")
-            error_df = pd.DataFrame()
-            error_df.attrs = {'error': error_msg}
+            error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
         # Yeni index oluştur
@@ -251,8 +249,7 @@ def analyze_sector_correlation(
         if len(price_df) < 30:
             error_msg = f"Yeterli ortak veri noktası yok (sadece {len(price_df)} gün, {len(price_data)} hisse)"
             print(f"⚠️  {error_msg}")
-            error_df = pd.DataFrame()
-            error_df.attrs = {'error': error_msg}
+            error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
         # Getiri hesapla
@@ -261,8 +258,7 @@ def analyze_sector_correlation(
         if len(returns_df) < 10:
             error_msg = f"Yeterli getiri verisi yok (sadece {len(returns_df)} gün)"
             print(f"⚠️  {error_msg}")
-            error_df = pd.DataFrame()
-            error_df.attrs = {'error': error_msg}
+            error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
         # Korelasyon matrisi
@@ -271,8 +267,7 @@ def analyze_sector_correlation(
         if correlation_matrix.empty:
             error_msg = "Korelasyon matrisi boş"
             print(f"⚠️  {error_msg}")
-            error_df = pd.DataFrame()
-            error_df.attrs = {'error': error_msg}
+            error_df = pd.DataFrame({'error': [error_msg]})
             return error_df
         
         print(f"✅ Korelasyon matrisi oluşturuldu: {correlation_matrix.shape}")

@@ -1229,10 +1229,14 @@ elif page == "📊 Sektörel Analiz":
                     corr_matrix = analyze_sector_correlation(sectors[selected_sector], period="6mo")
                     
                     # Hata mesajını kontrol et
-                    if hasattr(corr_matrix, 'attrs') and 'error' in corr_matrix.attrs:
-                        st.error(f"❌ {corr_matrix.attrs['error']}")
+                    if not corr_matrix.empty and 'error' in corr_matrix.columns:
+                        error_msg = corr_matrix['error'].iloc[0]
+                        st.error(f"❌ {error_msg}")
                         st.info(f"💡 **İpucu:** Seçilen sektör: {selected_sector}, Hisseler: {', '.join(sectors[selected_sector][:5])}")
-                    elif not corr_matrix.empty:
+                    elif corr_matrix.empty:
+                        st.error("❌ Korelasyon matrisi hesaplanamadı. Lütfen farklı bir sektör veya periyot deneyin.")
+                        st.info(f"💡 **İpucu:** Seçilen sektör: {selected_sector}, Hisseler: {', '.join(sectors[selected_sector][:5])}")
+                    else:
                         st.success("✅ Korelasyon matrisi hesaplandı!")
                         
                         # Heatmap
