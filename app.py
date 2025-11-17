@@ -471,7 +471,7 @@ if page == "🏠 Ana Sayfa - Analiz":
                                         st.markdown(detailed_report['piyasa_news_summary'])
                         else:
                             # Eski rapor formatı (geriye dönük uyumluluk)
-                        with st.expander("📄 Detaylı Rapor"):
+                            with st.expander("📄 Detaylı Rapor"):
                                 st.text(results.get('summary', 'Rapor mevcut değil.'))
                         
                         # Grafikler - Tabs ile organize edilmiş
