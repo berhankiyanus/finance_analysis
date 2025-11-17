@@ -317,9 +317,13 @@ def find_arbitrage_opportunities(
         except ImportError:
             from src.data_collection import get_price_data
         
+        # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
+        ticker1_formatted = ticker1 if '.IS' in ticker1 or ticker1.endswith('.IS') else (ticker1 + '.IS' if len(ticker1) == 5 and ticker1.isalpha() else ticker1)
+        ticker2_formatted = ticker2 if '.IS' in ticker2 or ticker2.endswith('.IS') else (ticker2 + '.IS' if len(ticker2) == 5 and ticker2.isalpha() else ticker2)
+        
         # Fiyat verilerini çek
-        df1 = get_price_data(ticker1, period=period)
-        df2 = get_price_data(ticker2, period=period)
+        df1 = get_price_data(ticker1_formatted, period=period)
+        df2 = get_price_data(ticker2_formatted, period=period)
         
         if df1.empty or df2.empty:
             return {'error': f'Fiyat verisi bulunamadı ({ticker1} veya {ticker2})'}
