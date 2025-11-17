@@ -144,9 +144,19 @@ if page == "🏠 Ana Sayfa - Analiz":
                         # Sonuçları göster
                         st.success("✅ Analiz tamamlandı!")
                         
-                        # API key kontrolü ve uyarı
-                        if results.get('news_count', 0) <= 3:
-                            st.warning("⚠️ **Dikkat:** Çok az haber bulundu. Bu, NEWS_API_KEY olmadığı için dummy (test) verisi kullanıldığı anlamına gelebilir. Gerçek haberler için NewsAPI key ekleyin. Detaylar için konsol çıktısına bakın.")
+                        # API key kontrolü ve uyarı - dummy veri kontrolü
+                        news_df = results.get('news_df', pd.DataFrame())
+                        is_dummy_data = False
+                        if not news_df.empty and 'source' in news_df.columns:
+                            # Dummy veri kontrolü: Eğer tüm haberlerin kaynağı "Dummy News" ise
+                            unique_sources = news_df['source'].unique()
+                            if len(unique_sources) == 1 and 'Dummy News' in unique_sources:
+                                is_dummy_data = True
+                        
+                        if is_dummy_data:
+                            st.warning("⚠️ **Dikkat:** Dummy (test) verisi kullanılıyor. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
+                        elif results.get('news_count', 0) <= 3:
+                            st.info("ℹ️ **Bilgi:** Çok az haber bulundu. Bu, seçilen periyotta gerçekten az haber olmasından kaynaklanıyor olabilir. Daha fazla haber için periyodu artırabilirsiniz.")
                         
                         # Skorlar
                         col_score1, col_score2, col_score3 = st.columns(3)

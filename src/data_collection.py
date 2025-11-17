@@ -107,10 +107,23 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
     except requests.exceptions.RequestException as e:
         print(f"❌ NewsAPI hatası: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_data = e.response.json()
+                print(f"   Hata detayı: {error_data.get('message', 'Bilinmeyen hata')}")
+                if error_data.get('code') == 'apiKeyInvalid':
+                    print("   ⚠️  API key geçersiz! Lütfen .env dosyasındaki NEWS_API_KEY'i kontrol edin.")
+                elif error_data.get('code') == 'rateLimited':
+                    print("   ⚠️  API limiti aşıldı! Ücretsiz plan günde 100 istek sınırına sahip.")
+            except:
+                pass
         print("⚠️  Dummy veri kullanılıyor.")
         return _get_dummy_news(company_name, days_back)
     except Exception as e:
         print(f"❌ Beklenmeyen hata: {e}")
+        import traceback
+        traceback.print_exc()
+        print("⚠️  Dummy veri kullanılıyor.")
         return _get_dummy_news(company_name, days_back)
 
 
