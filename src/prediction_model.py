@@ -366,6 +366,11 @@ class PriceDirectionPredictor:
         if not self.is_trained:
             raise ValueError("Eğitilmemiş model kaydedilemez.")
         
+        # Dizini oluştur (yoksa)
+        directory = os.path.dirname(filepath)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        
         model_data = {
             'model': self.model,
             'scaler': self.scaler,
