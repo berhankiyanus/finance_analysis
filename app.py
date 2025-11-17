@@ -1264,8 +1264,6 @@ elif page == "📊 Sektörel Analiz":
                         # Tablo
                         st.subheader("📋 Detaylı Matris")
                         st.dataframe(corr_matrix, use_container_width=True)
-                    else:
-                        st.error("❌ Korelasyon matrisi hesaplanamadı.")
         
         with tab3:
             st.subheader("🔄 Sektör Rotasyonu")
