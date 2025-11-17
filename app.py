@@ -139,11 +139,93 @@ st.markdown("---")
 st.sidebar.title("🎯 Menü")
 page = st.sidebar.radio(
     "Sayfa Seçin",
-    ["🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "📊 Sektörel Analiz", "🔥 Trending Hisseler", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
+    ["🚀 MVP Tahmin (Sprint 1)", "🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "📊 Sektörel Analiz", "🔥 Trending Hisseler", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
 )
 
+# MVP Tahmin Sayfası (Sprint 1)
+if page == "🚀 MVP Tahmin (Sprint 1)":
+    st.title("🚀 MVP Tahmin (Sprint 1)")
+    st.markdown("---")
+    
+    st.info("💡 Bu sayfa Sprint 1 MVP'sini test eder. FastAPI'ye istek atarak tahmin alır.")
+    
+    # API URL (local için)
+    api_url = st.sidebar.text_input(
+        "FastAPI URL",
+        value="http://127.0.0.1:8000",
+        help="FastAPI sunucusunun adresi"
+    )
+    
+    # Hisse kodu input
+    ticker = st.text_input(
+        "Hisse Kodu",
+        value="THYAO",
+        help="Örnek: THYAO, AAPL, MSFT"
+    )
+    
+    # Tahmin butonu
+    if st.button("🔮 Tahmin Al", type="primary"):
+        if not ticker:
+            st.error("⚠️ Lütfen bir hisse kodu girin!")
+        else:
+            with st.spinner(f"📡 {ticker} için tahmin alınıyor..."):
+                try:
+                    # API'ye istek at
+                    response = requests.post(
+                        f"{api_url}/predict/{ticker}",
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        
+                        # Sonuçları göster
+                        st.success("✅ Tahmin başarıyla alındı!")
+                        
+                        # Sinyal göster
+                        signal = result.get('signal', 'HOLD')
+                        confidence = result.get('confidence', 0.0)
+                        direction = result.get('direction', 'neutral')
+                        model_used = result.get('model_used', False)
+                        
+                        # Sinyal renkleri
+                        if signal == 'BUY':
+                            st.success(f"🟢 **SİNYAL: {signal}** (Güven: {confidence:.1%})")
+                        elif signal == 'SELL':
+                            st.error(f"🔴 **SİNYAL: {signal}** (Güven: {confidence:.1%})")
+                        else:
+                            st.warning(f"🟡 **SİNYAL: {signal}** (Güven: {confidence:.1%})")
+                        
+                        # Detaylar
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Yön", direction.upper())
+                            st.metric("Güven", f"{confidence:.1%}")
+                        with col2:
+                            st.metric("Model Kullanıldı", "✅ Evet" if model_used else "❌ Hayır (Rule-based)")
+                            if 'reason' in result:
+                                st.caption(f"Not: {result['reason']}")
+                        
+                        # JSON göster
+                        with st.expander("📄 Detaylı JSON Sonucu"):
+                            st.json(result)
+                    else:
+                        st.error(f"❌ API hatası: {response.status_code}")
+                        st.json(response.json() if response.content else {})
+                        
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ FastAPI sunucusuna bağlanılamadı!")
+                    st.info("💡 FastAPI'yi başlatmak için terminalde şu komutu çalıştırın:")
+                    st.code("cd api && uvicorn main:app --reload", language="bash")
+                    st.info("Veya proje kök dizininden:")
+                    st.code("uvicorn api.main:app --reload", language="bash")
+                except Exception as e:
+                    st.error(f"❌ Hata: {e}")
+                    import traceback
+                    st.code(traceback.format_exc(), language="python")
+
 # Ana Sayfa - Analiz
-if page == "🏠 Ana Sayfa - Analiz":
+elif page == "🏠 Ana Sayfa - Analiz":
     st.header("Şirket Analizi")
     
     # İki sütun: Giriş ve Sonuçlar
