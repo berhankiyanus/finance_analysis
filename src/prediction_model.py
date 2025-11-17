@@ -20,18 +20,26 @@ try:
     from sklearn.model_selection import TimeSeriesSplit
     from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, mean_squared_error, r2_score
     from sklearn.preprocessing import StandardScaler, LabelEncoder
-    import xgboost as xgb
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
     print("⚠️  scikit-learn yüklü değil. ML modelleri kullanılamayacak.")
 
 try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except (ImportError, Exception) as e:
+    XGBOOST_AVAILABLE = False
+    print(f"⚠️  XGBoost yüklü değil veya çalışmıyor: {e}")
+    print("   RandomForest kullanılacak.")
+
+try:
     import lightgbm as lgb
     LIGHTGBM_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception) as e:
     LIGHTGBM_AVAILABLE = False
-    print("⚠️  LightGBM yüklü değil. LightGBM modelleri kullanılamayacak.")
+    print(f"⚠️  LightGBM yüklü değil veya çalışmıyor: {type(e).__name__}")
+    print("   RandomForest kullanılacak.")
 
 
 class PriceDirectionPredictor:
@@ -82,13 +90,25 @@ class PriceDirectionPredictor:
                     n_jobs=-1
                 )
             elif self.model_type == "xgboost":
-                self.model = xgb.XGBClassifier(
-                    n_estimators=100,
-                    max_depth=6,
-                    learning_rate=0.1,
-                    random_state=42,
-                    eval_metric='mlogloss'
-                )
+                if not XGBOOST_AVAILABLE:
+                    print("⚠️  XGBoost kullanılamıyor, RandomForest kullanılıyor.")
+                    self.model_type = "random_forest"
+                    self.model = RandomForestClassifier(
+                        n_estimators=100,
+                        max_depth=10,
+                        min_samples_split=5,
+                        min_samples_leaf=2,
+                        random_state=42,
+                        n_jobs=-1
+                    )
+                else:
+                    self.model = xgb.XGBClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        learning_rate=0.1,
+                        random_state=42,
+                        eval_metric='mlogloss'
+                    )
             elif self.model_type == "lightgbm":
                 if not LIGHTGBM_AVAILABLE:
                     raise ImportError("LightGBM yüklü değil. 'pip install lightgbm' komutu ile yükleyin.")

@@ -405,14 +405,30 @@ def create_features(stock_df: pd.DataFrame, tcmb_df: Optional[pd.DataFrame] = No
     
     # TCMB verisini birleştir (eğer varsa)
     if tcmb_df is not None and not tcmb_df.empty:
-        # Tarih üzerinden merge (en yakın tarih eşleştirmesi)
-        features_df = features_df.merge(
-            tcmb_df.rename(columns={'value': 'tcmb_rate'}),
-            on='date',
-            how='left'
-        )
-        # Forward fill ile eksik değerleri doldur
-        features_df['tcmb_rate'] = features_df['tcmb_rate'].fillna(method='ffill')
+        # TCMB DataFrame'i hazırla
+        tcmb_clean = tcmb_df.copy()
+        if 'date' in tcmb_clean.columns:
+            # Timezone'u kaldır (eğer varsa)
+            if hasattr(tcmb_clean['date'].dtype, 'tz') and tcmb_clean['date'].dtype.tz is not None:
+                tcmb_clean['date'] = pd.to_datetime(tcmb_clean['date']).dt.tz_localize(None)
+            else:
+                tcmb_clean['date'] = pd.to_datetime(tcmb_clean['date'])
+            tcmb_clean = tcmb_clean.rename(columns={'value': 'tcmb_rate'})
+            
+            # Stock DataFrame'deki date'i de normalize et
+            if 'date' in features_df.columns:
+                features_df['date'] = pd.to_datetime(features_df['date'])
+                if hasattr(features_df['date'].dtype, 'tz') and features_df['date'].dtype.tz is not None:
+                    features_df['date'] = features_df['date'].dt.tz_localize(None)
+            
+            # Tarih üzerinden merge
+            features_df = features_df.merge(
+                tcmb_clean[['date', 'tcmb_rate']],
+                on='date',
+                how='left'
+            )
+            # Forward fill ile eksik değerleri doldur
+            features_df['tcmb_rate'] = features_df['tcmb_rate'].fillna(method='ffill')
     
     return features_df
 

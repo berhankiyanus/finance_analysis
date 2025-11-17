@@ -61,8 +61,7 @@ def main():
                 print(f"   📥 TCMB verisi çekiliyor...")
                 try:
                     tcmb_df = get_policy_rate(months=12)
-                    if not tcmb_df.empty:
-                        tcmb_df = tcmb_df.set_index('date')
+                    # tcmb_df'yi olduğu gibi bırak (date kolonu olarak kalmalı)
                 except Exception as e:
                     print(f"   ⚠️  TCMB verisi çekilemedi: {e}")
             
@@ -75,7 +74,7 @@ def main():
             predictor = train_price_direction_model(
                 ticker=ticker,
                 period="1y",
-                model_type="lightgbm" if ticker != "AAPL" else "random_forest",  # LightGBM varsa kullan
+                model_type="random_forest",  # XGBoost hatası için RandomForest kullan
                 future_days=5,
                 save_path=str(model_path)
             )
