@@ -22,15 +22,16 @@ except ImportError:
 
 
 # Türkiye BIST sektör tanımlamaları
+# Not: LOGO ve NETAS için veri bulunamayabilir, alternatif hisseler eklendi
 BIST_SECTORS = {
-    'Teknoloji': ['THYAO', 'LOGO', 'NETAS'],
+    'Teknoloji': ['THYAO', 'LOGO', 'NETAS', 'ASELS', 'HAVLS'],
     'Finans': ['GARAN', 'AKBNK', 'ISCTR', 'YKBNK', 'HALKB'],
-    'Sanayi': ['EREGL', 'TUPRS', 'SASA', 'PETKM'],
-    'Enerji': ['TUPRS', 'PETKM', 'AEFES'],
-    'İnşaat': ['ENKAI', 'GOLTS', 'IZINV'],
-    'Gıda': ['ULKER', 'PENGD', 'BANVT'],
-    'Perakende': ['MIGRS', 'BIMAS', 'SOKM'],
-    'Ulaştırma': ['THYAO', 'PGSUS', 'DOAS']
+    'Sanayi': ['EREGL', 'TUPRS', 'SASA', 'PETKM', 'KARSN'],
+    'Enerji': ['TUPRS', 'PETKM', 'AEFES', 'TPPWR'],
+    'İnşaat': ['ENKAI', 'GOLTS', 'IZINV', 'YGYO'],
+    'Gıda': ['ULKER', 'PENGD', 'BANVT', 'TATGD'],
+    'Perakende': ['MIGRS', 'BIMAS', 'SOKM', 'MAVI'],
+    'Ulaştırma': ['THYAO', 'PGSUS', 'DOAS', 'ALARK']
 }
 
 # ABD sektör tanımlamaları

@@ -1224,9 +1224,15 @@ elif page == "📊 Sektörel Analiz":
             
             selected_sector = st.selectbox("Sektör Seçin", list(sectors.keys()), key="sector_select")
             
+            # Periyot seçeneği ekle
+            corr_period = st.selectbox("Veri Periyodu", ["3mo", "6mo", "1y", "2y"], index=1, key="corr_matrix_period")
+            
+            # Seçilen sektörün hisselerini göster
+            st.info(f"📋 **Seçilen Sektör:** {selected_sector}\n\n**Hisseler:** {', '.join(sectors[selected_sector])}")
+            
             if st.button("📊 Korelasyon Matrisini Hesapla", type="primary"):
                 with st.spinner("Sektör korelasyon matrisi hesaplanıyor..."):
-                    corr_matrix = analyze_sector_correlation(sectors[selected_sector], period="6mo")
+                    corr_matrix = analyze_sector_correlation(sectors[selected_sector], period=corr_period)
                     
                     # Hata mesajını kontrol et
                     if not corr_matrix.empty and 'error' in corr_matrix.columns:
