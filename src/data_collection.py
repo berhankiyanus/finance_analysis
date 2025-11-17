@@ -71,39 +71,98 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days_back)
         
-        # NewsAPI isteği
-        # 'to' parametresi bugünün tarihini içerir, böylece bugünün haberleri de dahil edilir
+        # NewsAPI isteği - farklı arama stratejileri dene
         url = "https://newsapi.org/v2/everything"
-        params = {
-            'q': company_name,
-            'from': start_date.strftime('%Y-%m-%d'),
-            'to': end_date.strftime('%Y-%m-%d'),  # Bugün dahil
-            'sortBy': 'publishedAt',  # En yeni haberler önce
-            'language': 'tr,en',  # Türkçe ve İngilizce
-            'pageSize': 100,
-            'apiKey': api_key
-        }
         
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        # Arama terimlerini hazırla (farklı varyasyonlar dene)
+        search_terms = [company_name]
         
-        # API yanıtını kontrol et
-        api_status = data.get('status', 'unknown')
-        if api_status != 'ok':
-            error_msg = data.get('message', 'Bilinmeyen hata')
-            error_code = data.get('code', 'Bilinmiyor')
-            print(f"❌ NewsAPI hatası: {error_msg} (Kod: {error_code})")
-            if error_code == 'apiKeyInvalid':
-                print("   ⚠️  API key geçersiz! Lütfen Streamlit secrets'taki NEWS_API_KEY'i kontrol edin.")
-            elif error_code == 'rateLimited':
-                print("   ⚠️  API limiti aşıldı! Ücretsiz plan günde 100 istek sınırına sahip.")
-            print("⚠️  Dummy veri kullanılıyor.")
-            return _get_dummy_news(company_name, days_back)
+        # Eğer şirket adı büyük harflerle yazılmışsa (ticker sembolü olabilir), küçük harfe çevir
+        if company_name.isupper() and len(company_name) <= 5:
+            search_terms.append(company_name.lower())
         
-        # DataFrame'e çevir
-        articles = data.get('articles', [])
-        total_results = data.get('totalResults', 0)
+        # NewsAPI'den haber çek - farklı stratejiler dene
+        articles = []
+        total_results = 0
+        
+        # Strateji 1: Dil parametresi olmadan geniş arama
+        for search_term in search_terms:
+            params = {
+                'q': search_term,
+                'from': start_date.strftime('%Y-%m-%d'),
+                'to': end_date.strftime('%Y-%m-%d'),
+                'sortBy': 'publishedAt',
+                'pageSize': 100,
+                'apiKey': api_key
+            }
+            
+            try:
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                # API yanıtını kontrol et
+                api_status = data.get('status', 'unknown')
+                if api_status != 'ok':
+                    error_msg = data.get('message', 'Bilinmeyen hata')
+                    error_code = data.get('code', 'Bilinmiyor')
+                    if error_code == 'apiKeyInvalid':
+                        print(f"❌ NewsAPI hatası: API key geçersiz!")
+                        print("   ⚠️  Lütfen Streamlit secrets'taki NEWS_API_KEY'i kontrol edin.")
+                        return _get_dummy_news(company_name, days_back)
+                    elif error_code == 'rateLimited':
+                        print(f"❌ NewsAPI hatası: API limiti aşıldı!")
+                        print("   ⚠️  Ücretsiz plan günde 100 istek sınırına sahip.")
+                        return _get_dummy_news(company_name, days_back)
+                    else:
+                        print(f"⚠️  NewsAPI hatası: {error_msg} (Kod: {error_code})")
+                        continue  # Bir sonraki arama terimini dene
+                
+                # Sonuçları topla
+                found_articles = data.get('articles', [])
+                found_total = data.get('totalResults', 0)
+                
+                if found_articles:
+                    articles.extend(found_articles)
+                    total_results = max(total_results, found_total)
+                    print(f"✅ '{search_term}' için {len(found_articles)} haber bulundu")
+                    break  # Haber bulundu, diğer aramalara gerek yok
+                else:
+                    print(f"⚠️  '{search_term}' için 0 haber bulundu")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"⚠️  '{search_term}' araması sırasında hata: {e}")
+                continue  # Bir sonraki arama terimini dene
+        
+        # Strateji 2: Eğer hala haber bulunamadıysa, language parametresi ile dene
+        if not articles:
+            print(f"🔄 Alternatif arama stratejisi deneniyor...")
+            for search_term in search_terms:
+                # Önce İngilizce haberler
+                params = {
+                    'q': search_term,
+                    'from': start_date.strftime('%Y-%m-%d'),
+                    'to': end_date.strftime('%Y-%m-%d'),
+                    'sortBy': 'publishedAt',
+                    'language': 'en',
+                    'pageSize': 100,
+                    'apiKey': api_key
+                }
+                
+                try:
+                    response = requests.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if data.get('status') == 'ok':
+                        found_articles = data.get('articles', [])
+                        if found_articles:
+                            articles.extend(found_articles)
+                            total_results = max(total_results, data.get('totalResults', 0))
+                            print(f"✅ '{search_term}' için {len(found_articles)} İngilizce haber bulundu")
+                            break
+                except:
+                    continue
         
         print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} haber döndürüldü")
         print(f"   📅 Tarih aralığı: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}")
