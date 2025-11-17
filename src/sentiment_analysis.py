@@ -70,11 +70,19 @@ class SentimentAnalyzer:
                 'probs': {'positive': 0.33, 'negative': 0.33, 'neutral': 0.34}
             }
         
-        # Model varsa kullan
+        # Model varsa kullan (FinBERT - metni anlayarak analiz yapar)
         if self.model is not None:
-            return self._analyze_with_model(text)
+            result = self._analyze_with_model(text)
+            # Debug: Model kullanıldığını göster (sadece ilk birkaç çağrıda)
+            if not hasattr(self, '_debug_count'):
+                self._debug_count = 0
+            if self._debug_count < 3:
+                print(f"🔍 FinBERT modeli kullanıldı: '{text[:50]}...' -> {result['class']} (confidence: {result['confidence']:.2f})")
+                self._debug_count += 1
+            return result
         else:
-            # Basit kural tabanlı sentiment
+            # Model yüklenemedi, kural tabanlı sentiment (fallback)
+            print("⚠️  FinBERT modeli yüklenemedi, kural tabanlı analiz kullanılıyor.")
             return self._analyze_with_rules(text)
     
     def _analyze_with_model(self, text: str) -> Dict:
@@ -84,8 +92,10 @@ class SentimentAnalyzer:
         try:
             # Metni temizle ve uzunluğunu kontrol et
             text = text.strip()
-            if len(text) < 10:
-                # Çok kısa metinler için kural tabanlı analiz
+            # Çok kısa metinler için bile model'i dene (FinBERT kısa metinleri de anlayabilir)
+            # Sadece gerçekten boş veya çok kısa ise kural tabanlı analize geç
+            if len(text) < 5:
+                # Gerçekten çok kısa, kural tabanlı analiz
                 return self._analyze_with_rules(text)
             
             # Metni tokenize et
@@ -119,12 +129,23 @@ class SentimentAnalyzer:
             neg_prob = float(probs[1])
             neu_prob = float(probs[2])
             
-            # Eğer neutral olasılığı çok yüksekse (>0.7) ama pozitif/negatif arasında fark varsa,
-            # daha agresif bir threshold kullan
-            if predicted_class == 'neutral' and neu_prob > 0.7:
+            # FinBERT modelinin çıktılarını daha iyi yorumla
+            # Model zaten metni anlıyor, sadece threshold'u düşürmemiz gerekiyor
+            
+            # Eğer neutral olasılığı yüksekse ama pozitif/negatif arasında anlamlı fark varsa,
+            # pozitif/negatif'i tercih et (model metni anlamış demektir)
+            if predicted_class == 'neutral':
                 # Pozitif ve negatif arasındaki farka bak
                 diff = abs(pos_prob - neg_prob)
-                if diff > 0.15:  # %15'ten fazla fark varsa
+                
+                # Eğer pozitif veya negatif olasılığı neutral'dan daha yüksekse ve fark anlamlıysa
+                if pos_prob > neu_prob and pos_prob > neg_prob + 0.05:  # %5'ten fazla fark
+                    predicted_class = 'positive'
+                    confidence = pos_prob
+                elif neg_prob > neu_prob and neg_prob > pos_prob + 0.05:  # %5'ten fazla fark
+                    predicted_class = 'negative'
+                    confidence = neg_prob
+                elif diff > 0.10:  # %10'dan fazla fark varsa (daha agresif)
                     if pos_prob > neg_prob:
                         predicted_class = 'positive'
                         confidence = pos_prob
@@ -363,19 +384,35 @@ def analyze_news_sentiment(news_df: pd.DataFrame, analyzer: SentimentAnalyzer = 
         content = str(row.get('content', '')).strip()
         
         # Metinleri birleştir (boş olanları atla)
+        # FinBERT modeli için daha uzun ve anlamlı metinler daha iyi sonuç verir
         text_parts = []
+        
+        # 1. Başlık (her zaman ekle)
         if title:
             text_parts.append(title)
-        if summary and summary != title:  # Özet başlıktan farklıysa ekle
+        
+        # 2. Özet (başlıktan farklıysa ve yeterince uzunsa ekle)
+        if summary and summary != title and len(summary) > 20:
             text_parts.append(summary)
-        if content and len(content) > 50:  # İçerik yeterince uzunsa ekle (ilk 500 karakter)
-            text_parts.append(content[:500])
+        
+        # 3. İçerik (ilk 800 karakter - daha fazla context için)
+        if content and len(content) > 50:
+            # İçeriğin ilk 800 karakterini al (model max 512 token alır ama daha fazla context iyidir)
+            content_snippet = content[:800].strip()
+            # Eğer içerik özetten farklıysa ekle
+            if content_snippet != summary:
+                text_parts.append(content_snippet)
         
         text = " ".join(text_parts).strip()
         
-        # Eğer metin çok kısa ise, sadece başlık kullan
-        if len(text) < 20 and title:
-            text = title
+        # Eğer metin hala çok kısa ise, en azından başlık ve özeti birleştir
+        if len(text) < 30:
+            if title and summary and summary != title:
+                text = f"{title}. {summary}"
+            elif title:
+                text = title
+            else:
+                text = summary if summary else ""
         
         # Sentiment analizi
         sentiment_result = analyzer.analyze_sentiment(text)
