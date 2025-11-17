@@ -1032,7 +1032,8 @@ elif page == "💼 Portföy Optimizasyonu":
                 min_value=0.0,
                 max_value=10.0,
                 value=2.0,
-                step=0.1
+                step=0.1,
+                help="Maksimum Sharpe optimizasyonu için, en az bir hissenin beklenen getirisi bu değerden yüksek olmalıdır. Düşük değerler daha kolay sonuç verir."
             ) / 100.0
             
             optimize_button = st.button("🚀 Portföy Optimize Et", type="primary")
@@ -1098,7 +1099,26 @@ elif page == "💼 Portföy Optimizasyonu":
                                 
                                 # Eğer method değiştiyse (fallback), kullanıcıya bilgi ver
                                 if result.get('method_used') != optimization_method:
-                                    st.warning(f"⚠️ **Not:** Maksimum Sharpe optimizasyonu yapılamadı (beklenen getiriler risksiz faiz oranından düşük). Minimum volatilite optimizasyonu kullanıldı.")
+                                    st.warning(f"⚠️ **Not:** Maksimum Sharpe optimizasyonu yapılamadı.")
+                                    with st.expander("ℹ️ Neden?", expanded=False):
+                                        st.markdown("""
+                                        **Maksimum Sharpe optimizasyonu** için, en az bir varlığın beklenen getirisi risksiz faiz oranından yüksek olmalıdır.
+                                        
+                                        **Neden olmadı?**
+                                        - Seçilen hisselerin geçmiş performansı risksiz faiz oranından (%2) düşük
+                                        - Bu durum, son dönemde düşük getiri veya negatif trend gösterebilir
+                                        - Veri periyodu çok kısa olabilir (örn: 6mo)
+                                        
+                                        **Ne yapıldı?**
+                                        - Otomatik olarak **Minimum Volatilite** optimizasyonuna geçildi
+                                        - Bu optimizasyon, riski minimize ederek en güvenli portföyü bulur
+                                        - Getiri beklentisi düşük olsa bile, risk yönetimi açısından mantıklı
+                                        
+                                        **Öneriler:**
+                                        - Risksiz faiz oranını düşürün (örn: %1 veya %0.5)
+                                        - Daha uzun periyot seçin (örn: 2y veya 3y)
+                                        - Farklı hisseler deneyin
+                                        """)
                                 
                                 weights = result['weights']
                                 
