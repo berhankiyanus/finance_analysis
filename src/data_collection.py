@@ -113,10 +113,13 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             if total_results == 0:
                 print(f"⚠️  NewsAPI'de '{company_name}' için son {days_back} günde haber bulunamadı.")
                 print(f"   💡 İpucu: Şirket adını İngilizce veya ticker sembolü ile deneyin (örn: 'AAPL' yerine 'Apple Inc.')")
+                print(f"   ℹ️  API key çalışıyor, ancak bu şirket için haber bulunamadı.")
+                # API key çalışıyor ama haber yok - boş DataFrame döndür (dummy veri değil)
+                return pd.DataFrame(columns=['title', 'summary', 'content', 'published_at', 'source', 'url', 'relevance_score'])
             else:
                 print(f"⚠️  NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")
-            print("⚠️  Dummy veri kullanılıyor.")
-            return _get_dummy_news(company_name, days_back)
+                print("⚠️  Dummy veri kullanılıyor.")
+                return _get_dummy_news(company_name, days_back)
         
         news_list = []
         

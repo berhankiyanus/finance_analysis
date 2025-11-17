@@ -195,13 +195,13 @@ if page == "🏠 Ana Sayfa - Analiz":
                             if len(unique_sources) == 1 and 'Dummy News' in unique_sources:
                                 is_dummy_data = True
                         elif news_df.empty and news_count == 0:
-                            # Boş DataFrame ve 0 haber sayısı - bu durumda API key kontrolü yap
-                            # Eğer API key varsa ama haber bulunamadıysa, bu dummy data değil
-                            # API key yoksa, dummy data kullanılmış olabilir
-                            # Sidebar'dan API key durumunu kontrol et
+                            # Boş DataFrame ve 0 haber sayısı
+                            # Eğer API key yoksa, dummy data kullanılmış olabilir
+                            # Eğer API key varsa, API'den haber bulunamadı demektir (dummy data değil)
                             if NEWS_API_KEY is None:
                                 is_dummy_data = True
                         
+                        # Mesajları göster
                         if is_dummy_data:
                             st.warning("⚠️ **Dikkat:** Dummy (test) verisi kullanılıyor. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
                         elif news_count == 0 and NEWS_API_KEY is not None:
