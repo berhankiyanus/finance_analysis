@@ -266,8 +266,13 @@ def analyze_social_sentiment_trend(
     try:
         from src.data_collection import get_price_data
         
+        # Türk hisseleri için .IS ekle
+        ticker_for_yfinance = ticker
+        if len(ticker) == 5 and not ticker.endswith('.IS'):
+            ticker_for_yfinance = f"{ticker}.IS"
+        
         # Fiyat verisi çek (son days_back + 10 gün, karşılaştırma için)
-        price_df = get_price_data(ticker, period=f"{max(days_back + 10, 30)}d")
+        price_df = get_price_data(ticker_for_yfinance, period=f"{max(days_back + 10, 30)}d")
         
         if not price_df.empty and len(price_df) >= 2:
             # Son gün vs days_back gün önce
@@ -292,8 +297,12 @@ def analyze_social_sentiment_trend(
                 volume_change = ((current_volume / past_volume) - 1) * 100
             else:
                 volume_change = 0.0
+            
+            print(f"   📈 {ticker}: Fiyat değişimi: {price_change:.2f}%, Hacim değişimi: {volume_change:.2f}%")
+        else:
+            print(f"   ⚠️  {ticker}: Yeterli fiyat verisi yok")
     except Exception as e:
-        print(f"⚠️  Fiyat verisi hatası: {e}")
+        print(f"⚠️  {ticker} fiyat verisi hatası: {e}")
     
     # 3. Forum postları (opsiyonel - şimdilik atlanıyor)
     # Gerçek forum scraping için API veya özel entegrasyon gerekli
