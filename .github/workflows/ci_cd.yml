@@ -41,30 +41,9 @@ jobs:
         python -c "from src.financial_analysis import compute_features; print('✅ Import başarılı')"
         python -c "from src.sentiment_analysis import SentimentAnalyzer; print('✅ Import başarılı')"
 
-  deploy:
-    name: Deploy to Streamlit Cloud
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    
-    - name: Streamlit Cloud Deployment Info
-      run: |
-        echo "✅ Testler başarılı! Streamlit Cloud otomatik deployment için hazır."
-        echo "📝 Not: Streamlit Cloud, GitHub repository'nizi otomatik olarak algılar."
-        echo "💡 Streamlit Cloud dashboard'dan manuel olarak deploy edebilirsiniz:"
-        echo "   https://share.streamlit.io/"
-        echo ""
-        echo "🔗 Repository: ${{ github.repository }}"
-        echo "📁 App Path: app.py"
-        echo "🌿 Branch: ${{ github.ref_name }}"
-    
-    # Not: Streamlit Cloud artık GitHub Actions ile direkt deploy desteklemiyor
-    # Streamlit Cloud dashboard'dan manuel olarak deploy edilmesi gerekiyor
-    # veya Streamlit Cloud'un otomatik deployment özelliği kullanılabilir
+  # Deploy job kaldırıldı - Streamlit Cloud otomatik deployment kullanıyor
+  # Streamlit Cloud, GitHub repository'nizi otomatik olarak algılar ve deploy eder
+  # Manuel deployment için: https://share.streamlit.io/
 
   # Otomatik Model Yeniden Eğitimi (Haftalık - Pazar gecesi)
   retrain_models:
