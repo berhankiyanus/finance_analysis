@@ -18,6 +18,7 @@ try:
         compute_overall_score,
         interpret_score,
         generate_turkish_summary,
+        generate_detailed_report,
         predict_direction
     )
 except ImportError:
@@ -28,6 +29,7 @@ except ImportError:
         compute_overall_score,
         interpret_score,
         generate_turkish_summary,
+        generate_detailed_report,
         predict_direction
     )
 
@@ -160,6 +162,20 @@ def analyze_company(
         price_change_30d=price_change_30d
     )
     
+    # Detaylı rapor oluştur
+    detailed_report = generate_detailed_report(
+        company_name=company_name,
+        ticker=ticker,
+        sentiment_score=sentiment_score,
+        financial_score=financial_score,
+        overall_score=overall_score,
+        news_df=news_df_with_sentiment,
+        interpretation=interpretation,
+        direction_prediction=direction_prediction,
+        feature_vector=feature_vector,
+        price_change_30d=price_change_30d
+    )
+    
     # Sonuçları birleştir
     results = {
         'company_name': company_name,
@@ -174,7 +190,8 @@ def analyze_company(
         'price_df': price_df_with_features,
         'feature_vector': feature_vector,
         'fundamentals': fundamentals,
-        'summary': summary
+        'summary': summary,
+        'detailed_report': detailed_report
     }
     
     return results

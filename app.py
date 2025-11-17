@@ -189,8 +189,57 @@ if page == "🏠 Ana Sayfa - Analiz":
                                    f"({pred.get('confidence', 0):.1%} güven)")
                         
                         # Detaylı rapor
-                        with st.expander("📄 Detaylı Rapor"):
-                            st.text(results['summary'])
+                        if 'detailed_report' in results and results['detailed_report']:
+                            detailed_report = results['detailed_report']
+                            
+                            st.subheader("📋 Detaylı Analiz Raporu")
+                            
+                            # Markdown raporu göster
+                            st.markdown(detailed_report['summary'])
+                            
+                            # En önemli haberler
+                            if detailed_report.get('news_analysis'):
+                                st.subheader("📰 En Etkili Haberler")
+                                for news in detailed_report['news_analysis'][:5]:
+                                    with st.container():
+                                        col1, col2 = st.columns([1, 4])
+                                        with col1:
+                                            st.write(f"{news['sentiment_emoji']} **{news['sentiment'].upper()}**")
+                                            st.caption(f"Etki: {news['impact']}")
+                                            st.caption(f"Güven: {news['confidence']:.1%}")
+                                        with col2:
+                                            st.write(f"**{news['title']}**")
+                                            st.caption(f"📅 {news['date']}")
+                                        st.divider()
+                            
+                            # Finansal faktörler
+                            if detailed_report.get('financial_analysis'):
+                                st.subheader("💰 Finansal Göstergeler")
+                                for factor in detailed_report['financial_analysis']:
+                                    col1, col2, col3 = st.columns([2, 1, 3])
+                                    with col1:
+                                        st.write(f"**{factor['factor']}**")
+                                    with col2:
+                                        st.write(f"`{factor['value']}`")
+                                    with col3:
+                                        st.write(f"{factor['status']} - {factor['impact']}")
+                            
+                            # Öneri nedenleri
+                            if detailed_report.get('recommendation_reasons'):
+                                st.subheader("💡 Al/Sat Önerisi Nedenleri")
+                                for reason in detailed_report['recommendation_reasons']:
+                                    emoji = "✅" if reason['impact'] == 'Pozitif' else "❌" if reason['impact'] == 'Negatif' else "⚠️"
+                                    st.write(f"{emoji} **{reason['type']}:** {reason['reason']}")
+                            
+                            # En önemli faktörler
+                            if detailed_report.get('key_factors'):
+                                st.subheader("🔑 En Önemli Faktörler")
+                                for i, factor in enumerate(detailed_report['key_factors'][:5], 1):
+                                    st.write(f"{i}. **{factor['type']}:** {factor['description']}")
+                        else:
+                            # Eski rapor formatı (geriye dönük uyumluluk)
+                            with st.expander("📄 Detaylı Rapor"):
+                                st.text(results.get('summary', 'Rapor mevcut değil.'))
                         
                         # Grafikler
                         st.subheader("📈 Görselleştirmeler")
