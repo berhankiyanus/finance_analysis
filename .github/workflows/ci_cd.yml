@@ -5,6 +5,8 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  schedule:
+    - cron: '0 2 * * 0'  # Her Pazar gecesi 02:00 UTC
 
 jobs:
   test:
@@ -49,9 +51,8 @@ jobs:
   retrain_models:
     name: Otomatik Model Yeniden Eğitimi
     runs-on: ubuntu-latest
-    # Her Pazar gecesi 02:00 UTC'de çalış (cron: dakika saat gün ay hafta)
-    schedule:
-      - cron: '0 2 * * 0'  # Her Pazar gecesi 02:00 UTC
+    # Schedule workflow seviyesinde tanımlı (on: bölümünde)
+    # Her Pazar gecesi 02:00 UTC'de otomatik çalışır
     # Manuel tetikleme için de çalışır (push/PR ile)
     
     steps:
