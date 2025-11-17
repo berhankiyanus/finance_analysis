@@ -190,31 +190,54 @@ def analyze_sector_correlation(
         
         # Tüm hisselerin fiyat verilerini çek
         price_data = {}
+        failed_tickers = []
+        
         for ticker in sector_tickers:
             try:
                 # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
-                ticker_formatted = ticker if '.IS' in ticker or ticker.endswith('.IS') else (ticker + '.IS' if len(ticker) == 5 and ticker.isalpha() else ticker)
+                # 5 karakterli ve sadece harf içeren hisseler için .IS ekle
+                ticker_formatted = ticker
+                if not ('.IS' in ticker or ticker.endswith('.IS')):
+                    if len(ticker) == 5 and ticker.isalpha():
+                        ticker_formatted = ticker + '.IS'
+                    # Alternatif: XU100 gibi endeksler için .IS ekleme
                 
+                print(f"   📊 {ticker} ({ticker_formatted}) için veri çekiliyor...")
                 df = get_price_data(ticker_formatted, period=period)
-                if not df.empty and 'close' in df.columns:
-                    # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
-                    if 'date' in df.columns:
-                        df = df.set_index('date')
-                        df.index = pd.to_datetime(df.index)
-                    elif not isinstance(df.index, pd.DatetimeIndex):
-                        df.index = pd.to_datetime(df.index)
-                    
-                    # Tarihleri normalize et
-                    df.index = df.index.normalize()
-                    
-                    # Close fiyatlarını al
-                    price_data[ticker] = df['close']
+                
+                if df.empty:
+                    print(f"   ⚠️  {ticker} ({ticker_formatted}) için veri boş")
+                    failed_tickers.append(f"{ticker} (veri boş)")
+                    continue
+                
+                if 'close' not in df.columns:
+                    print(f"   ⚠️  {ticker} ({ticker_formatted}) için 'close' kolonu yok. Mevcut kolonlar: {list(df.columns)}")
+                    failed_tickers.append(f"{ticker} ('close' kolonu yok)")
+                    continue
+                
+                # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
+                if 'date' in df.columns:
+                    df = df.set_index('date')
+                    df.index = pd.to_datetime(df.index)
+                elif not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index)
+                
+                # Tarihleri normalize et
+                df.index = df.index.normalize()
+                
+                # Close fiyatlarını al
+                price_data[ticker] = df['close']
+                print(f"   ✅ {ticker}: {len(df)} gün veri çekildi")
+                
             except Exception as e:
-                print(f"⚠️  {ticker} için veri çekilemedi: {e}")
+                error_msg = str(e)
+                print(f"   ❌ {ticker} için veri çekilemedi: {error_msg}")
+                failed_tickers.append(f"{ticker} ({error_msg[:50]})")
                 continue
         
         if len(price_data) < 2:
-            error_msg = f"Yeterli fiyat verisi bulunamadı (sadece {len(price_data)} hisse başarılı: {list(price_data.keys())})"
+            success_tickers = list(price_data.keys()) if price_data else []
+            error_msg = f"Yeterli fiyat verisi bulunamadı. Başarılı: {success_tickers}, Başarısız: {failed_tickers}"
             print(f"⚠️  {error_msg}")
             # Hata mesajını içeren özel DataFrame döndür (ilk satırda hata mesajı)
             error_df = pd.DataFrame({'error': [error_msg]})

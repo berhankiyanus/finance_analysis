@@ -1233,9 +1233,15 @@ elif page == "📊 Sektörel Analiz":
                         error_msg = corr_matrix['error'].iloc[0]
                         st.error(f"❌ {error_msg}")
                         st.info(f"💡 **İpucu:** Seçilen sektör: {selected_sector}, Hisseler: {', '.join(sectors[selected_sector][:5])}")
+                        st.info("💡 **Çözüm:** Farklı bir sektör seçin veya periyodu değiştirin (örn: 1y yerine 3mo)")
                     elif corr_matrix.empty:
-                        st.error("❌ Korelasyon matrisi hesaplanamadı. Lütfen farklı bir sektör veya periyot deneyin.")
+                        st.error("❌ Korelasyon matrisi hesaplanamadı.")
+                        st.warning(f"⚠️ **Olası nedenler:**")
+                        st.write(f"   • Seçilen hisseler için veri bulunamadı: {', '.join(sectors[selected_sector][:5])}")
+                        st.write(f"   • Yeterli ortak veri noktası yok")
+                        st.write(f"   • Türk hisseleri için '.IS' uzantısı gerekebilir")
                         st.info(f"💡 **İpucu:** Seçilen sektör: {selected_sector}, Hisseler: {', '.join(sectors[selected_sector][:5])}")
+                        st.info("💡 **Çözüm:** Farklı bir sektör seçin veya periyodu değiştirin (örn: 1y yerine 3mo)")
                     else:
                         st.success("✅ Korelasyon matrisi hesaplandı!")
                         
