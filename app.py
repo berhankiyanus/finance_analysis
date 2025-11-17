@@ -485,38 +485,38 @@ if page == "🏠 Ana Sayfa - Analiz":
                             
                             with tab1:
                                 # Gelişmiş fiyat grafiği
-                            fig = make_subplots(
+                                fig = make_subplots(
                                     rows=3, cols=1,
                                     subplot_titles=('Fiyat Hareketi', 'Hacim', 'RSI (14)'),
                                     vertical_spacing=0.08,
                                     row_heights=[0.5, 0.25, 0.25],
                                     shared_xaxes=True
-                            )
-                            
-                            # Fiyat çizgisi
-                            fig.add_trace(
-                                go.Scatter(
+                                )
+                                
+                                # Fiyat çizgisi
+                                fig.add_trace(
+                                    go.Scatter(
                                         x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                    y=price_df['close'],
-                                    mode='lines',
-                                    name='Kapanış Fiyatı',
+                                        y=price_df['close'],
+                                        mode='lines',
+                                        name='Kapanış Fiyatı',
                                         line=dict(color='#1f77b4', width=2),
                                         hovertemplate='<b>%{fullData.name}</b><br>' +
                                                       'Tarih: %{x}<br>' +
                                                       'Fiyat: $%{y:.2f}<br>' +
                                                       '<extra></extra>'
-                                ),
-                                row=1, col=1
-                            )
-                            
-                            # Hareketli ortalamalar
-                            if 'ma_20' in price_df.columns:
-                                fig.add_trace(
-                                    go.Scatter(
+                                    ),
+                                    row=1, col=1
+                                )
+                                
+                                # Hareketli ortalamalar
+                                if 'ma_20' in price_df.columns:
+                                    fig.add_trace(
+                                        go.Scatter(
                                             x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                        y=price_df['ma_20'],
-                                        mode='lines',
-                                        name='MA 20',
+                                            y=price_df['ma_20'],
+                                            mode='lines',
+                                            name='MA 20',
                                             line=dict(color='orange', width=1.5, dash='dash'),
                                             hovertemplate='<b>MA 20</b><br>Fiyat: $%{y:.2f}<extra></extra>'
                                         ),
@@ -532,22 +532,22 @@ if page == "🏠 Ana Sayfa - Analiz":
                                             name='MA 50',
                                             line=dict(color='purple', width=1.5, dash='dot'),
                                             hovertemplate='<b>MA 50</b><br>Fiyat: $%{y:.2f}<extra></extra>'
-                                    ),
-                                    row=1, col=1
-                                )
-                            
-                            # Hacim
-                            fig.add_trace(
-                                go.Bar(
+                                        ),
+                                        row=1, col=1
+                                    )
+                                
+                                # Hacim
+                                fig.add_trace(
+                                    go.Bar(
                                         x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                    y=price_df['volume'],
-                                    name='Hacim',
+                                        y=price_df['volume'],
+                                        name='Hacim',
                                         marker_color='lightblue',
                                         hovertemplate='<b>Hacim</b><br>%{y:,.0f}<extra></extra>'
-                                ),
-                                row=2, col=1
-                            )
-                            
+                                    ),
+                                    row=2, col=1
+                                )
+                                
                                 # RSI
                                 if 'rsi_14' in price_df.columns:
                                     fig.add_trace(
@@ -565,8 +565,8 @@ if page == "🏠 Ana Sayfa - Analiz":
                                     # RSI seviyeleri (70 ve 30)
                                     fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
                                     fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
-                            
-                            fig.update_layout(
+                                
+                                fig.update_layout(
                                     title=f'{company_name} ({ticker}) - Detaylı Fiyat Analizi',
                                     height=800,
                                     showlegend=True,
@@ -575,8 +575,8 @@ if page == "🏠 Ana Sayfa - Analiz":
                                 )
                                 
                                 fig.update_xaxes(title_text="Tarih", row=3, col=1)
-                            fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
-                            fig.update_yaxes(title_text="Hacim", row=2, col=1)
+                                fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
+                                fig.update_yaxes(title_text="Hacim", row=2, col=1)
                                 fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
                                 
                                 st.plotly_chart(fig, use_container_width=True, config={
@@ -704,33 +704,33 @@ if page == "🏠 Ana Sayfa - Analiz":
                             
                             with tab4:
                                 # Haber analizi grafikleri
-                        if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
-                            news_df = results['news_df']
+                                if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
+                                    news_df = results['news_df']
                                     
                                     col_news1, col_news2 = st.columns(2)
                                     
                                     with col_news1:
                                         # Sentiment dağılımı
-                            sentiment_counts = news_df['sentiment_class'].value_counts()
-                            
-                            fig_sentiment = go.Figure(data=[go.Bar(
-                                x=sentiment_counts.index,
-                                y=sentiment_counts.values,
-                                marker_color=['green', 'red', 'gray'],
-                                text=sentiment_counts.values,
+                                        sentiment_counts = news_df['sentiment_class'].value_counts()
+                                        
+                                        fig_sentiment = go.Figure(data=[go.Bar(
+                                            x=sentiment_counts.index,
+                                            y=sentiment_counts.values,
+                                            marker_color=['green', 'red', 'gray'],
+                                            text=sentiment_counts.values,
                                             textposition='auto',
                                             hovertemplate='<b>%{x}</b><br>Haber Sayısı: %{y}<extra></extra>'
-                            )])
-                            
-                            fig_sentiment.update_layout(
-                                title='Haber Sentiment Dağılımı',
-                                xaxis_title='Sentiment Sınıfı',
-                                yaxis_title='Haber Sayısı',
-                                height=300
-                            )
-                            
-                            st.plotly_chart(fig_sentiment, use_container_width=True)
-                            
+                                        )])
+                                        
+                                        fig_sentiment.update_layout(
+                                            title='Haber Sentiment Dağılımı',
+                                            xaxis_title='Sentiment Sınıfı',
+                                            yaxis_title='Haber Sayısı',
+                                            height=300
+                                        )
+                                        
+                                        st.plotly_chart(fig_sentiment, use_container_width=True)
+                                    
                                     with col_news2:
                                         # Sentiment zaman serisi
                                         if 'published_at' in news_df.columns:
@@ -777,6 +777,8 @@ if page == "🏠 Ana Sayfa - Analiz":
                                         )
                                         
                                         st.plotly_chart(fig_confidence, use_container_width=True)
+                                else:
+                                    st.info("Haber analizi için veri bulunamadı.")
                         
                         # Haber listesi (ayrı bir bölüm)
                         if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
@@ -823,15 +825,15 @@ if page == "🏠 Ana Sayfa - Analiz":
                         
                         with col_score1:
                             # Skor bar grafiği
-                        scores = {
-                            'Sentiment': results['sentiment_score'],
-                            'Finansal': results['financial_score'],
-                            'Genel Durum': results['overall_score']
-                        }
-                        
-                        fig_scores = go.Figure(data=[go.Bar(
-                            x=list(scores.keys()),
-                            y=list(scores.values()),
+                            scores = {
+                                'Sentiment': results['sentiment_score'],
+                                'Finansal': results['financial_score'],
+                                'Genel Durum': results['overall_score']
+                            }
+                            
+                            fig_scores = go.Figure(data=[go.Bar(
+                                x=list(scores.keys()),
+                                y=list(scores.values()),
                                 marker=dict(
                                     color=[scores['Sentiment'], scores['Finansal'], scores['Genel Durum']],
                                     colorscale='RdYlGn',
@@ -839,19 +841,19 @@ if page == "🏠 Ana Sayfa - Analiz":
                                     cmax=100,
                                     showscale=True
                                 ),
-                            text=[f"{v:.1f}" for v in scores.values()],
+                                text=[f"{v:.1f}" for v in scores.values()],
                                 textposition='auto',
                                 hovertemplate='<b>%{x}</b><br>Skor: %{y:.1f}/100<extra></extra>'
-                        )])
-                        
-                        fig_scores.update_layout(
-                            title='Skor Karşılaştırması',
-                            yaxis_title='Skor (0-100)',
-                            yaxis=dict(range=[0, 100]),
+                            )])
+                            
+                            fig_scores.update_layout(
+                                title='Skor Karşılaştırması',
+                                yaxis_title='Skor (0-100)',
+                                yaxis=dict(range=[0, 100]),
                                 height=350
-                        )
-                        
-                        st.plotly_chart(fig_scores, use_container_width=True)
+                            )
+                            
+                            st.plotly_chart(fig_scores, use_container_width=True)
                         
                         with col_score2:
                             # Skor radar grafiği
