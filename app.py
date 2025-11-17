@@ -16,82 +16,23 @@ from dotenv import load_dotenv
 # Proje kök dizinini path'e ekle
 sys.path.insert(0, str(Path(__file__).parent))
 
-# API Key'i yükle - önce Streamlit secrets'tan, sonra .env'den
-NEWS_API_KEY = None
+# Yardımcı fonksiyonları import et
+from src.utils import load_api_key_from_streamlit_or_env
 
-# 1. Streamlit Cloud secrets'tan dene (web ortamı için)
-try:
-    if hasattr(st, 'secrets') and 'NEWS_API_KEY' in st.secrets:
-        NEWS_API_KEY = st.secrets['NEWS_API_KEY']
-        os.environ['NEWS_API_KEY'] = NEWS_API_KEY
-        st.sidebar.success("✅ API Key Streamlit secrets'tan yüklendi")
-except:
-    pass
+# API Key'leri yükle (refactored helper fonksiyon ile)
+NEWS_API_KEY = load_api_key_from_streamlit_or_env(
+    "NEWS_API_KEY",
+    sidebar_label="News API Key",
+    required=True
+)
 
-# 2. .env dosyasından dene (local için)
-# env_path'i genel olarak tanımla (hem NEWS_API_KEY hem GEMINI_API_KEY için kullanılacak)
-project_root = Path(__file__).parent
-env_path = project_root / '.env'
+GEMINI_API_KEY = load_api_key_from_streamlit_or_env(
+    "GEMINI_API_KEY",
+    sidebar_label="Gemini API Key",
+    required=False
+)
 
-if NEWS_API_KEY is None:
-    if env_path.exists():
-        load_dotenv(dotenv_path=env_path)
-        NEWS_API_KEY = os.getenv('NEWS_API_KEY')
-        if NEWS_API_KEY:
-            st.sidebar.success("✅ API Key .env dosyasından yüklendi")
-        else:
-            st.sidebar.warning("⚠️ .env dosyası var ama NEWS_API_KEY bulunamadı")
-    else:
-        st.sidebar.warning("⚠️ .env dosyası bulunamadı")
-
-# 3. Environment variable'dan dene (genel)
-if NEWS_API_KEY is None:
-    NEWS_API_KEY = os.getenv('NEWS_API_KEY')
-    if NEWS_API_KEY:
-        st.sidebar.info("ℹ️ API Key environment variable'dan yüklendi")
-
-# Son kontrol
-if NEWS_API_KEY is None:
-    st.sidebar.error("❌ NEWS_API_KEY bulunamadı! Lütfen Streamlit secrets veya .env dosyasına ekleyin.")
-else:
-    # API key'i environment'a set et
-    os.environ['NEWS_API_KEY'] = NEWS_API_KEY
-
-# Gemini API Key'i yükle
-GEMINI_API_KEY = None
-
-# 1. Streamlit Cloud secrets'tan dene (web ortamı için)
-try:
-    if hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
-        GEMINI_API_KEY = st.secrets['GEMINI_API_KEY']
-        os.environ['GEMINI_API_KEY'] = GEMINI_API_KEY
-        st.sidebar.success("✅ Gemini API Key Streamlit secrets'tan yüklendi")
-except:
-    pass
-
-# 2. .env dosyasından dene (local için)
-if GEMINI_API_KEY is None:
-    if env_path.exists():
-        # .env dosyasını yükle (eğer daha önce yüklenmediyse)
-        load_dotenv(dotenv_path=env_path, override=False)
-        GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-        if GEMINI_API_KEY:
-            st.sidebar.success("✅ Gemini API Key .env dosyasından yüklendi")
-        else:
-            st.sidebar.info("ℹ️ Gemini API Key bulunamadı (opsiyonel - FinBERT kullanılacak)")
-
-# 3. Environment variable'dan dene (genel)
-if GEMINI_API_KEY is None:
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    if GEMINI_API_KEY:
-        st.sidebar.info("ℹ️ Gemini API Key environment variable'dan yüklendi")
-
-# Son kontrol
-if GEMINI_API_KEY:
-    # API key'i environment'a set et
-    os.environ['GEMINI_API_KEY'] = GEMINI_API_KEY
-else:
-    st.sidebar.info("ℹ️ Gemini API Key bulunamadı. Sadece FinBERT modeli kullanılacak.")
+if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
 from src.main import analyze_company

@@ -936,26 +936,35 @@ def get_all_data_for_stock(
     else:
         print("\n4️⃣  KAP raporları atlandı (TR hissesi değil veya kapalı).")
     
-    # 5. Google Search haberleri
+    # 5. Google Search haberleri (opsiyonel - API key gerekli)
     if include_google_search:
         print("\n5️⃣  Google Search'ten haberler çekiliyor...")
         try:
             from .google_search import search_market_news
         except ImportError:
-            from src.google_search import search_market_news
+            try:
+                from src.google_search import search_market_news
+            except ImportError:
+                print("   ⚠️  google_search modülü bulunamadı. Google Search atlanıyor.")
+                search_market_news = None
         
-        try:
-            # Hisse bazlı arama
-            stock_keywords = [ticker, company_name]
-            results['google_news'] = search_market_news(stock_keywords, num_results=10)
-            if results['google_news']:
-                print(f"   ✅ {len(results['google_news'])} Google haber bulundu.")
-            else:
-                print("   ⚠️  Google haber bulunamadı.")
-        except Exception as e:
-            print(f"   ❌ Google Search hatası: {e}")
+        if search_market_news:
+            try:
+                # Hisse bazlı arama
+                stock_keywords = [ticker, company_name]
+                results['google_news'] = search_market_news(stock_keywords, num_results=10)
+                if results.get('google_news'):
+                    print(f"   ✅ {len(results['google_news'])} Google Search haberi bulundu.")
+                else:
+                    print("   ⚠️  Google Search'ten haber bulunamadı (API key eksik olabilir).")
+            except Exception as e:
+                print(f"   ⚠️  Google Search hatası: {e}")
+                results['google_news'] = []
+        else:
+            results['google_news'] = []
     else:
-        print("\n5️⃣  Google Search atlandı.")
+        results['google_news'] = []
+        print("\n5️⃣  Google Search atlandı (include_google_search=False).")
     
     # 6. Makroekonomik veriler
     if include_macro:

@@ -171,7 +171,7 @@ async def predict_direction(request: PredictionRequest):
                 return _rule_based_prediction(
                     ticker, 
                     feature_vector, 
-                    f"Model bulunamadı: {model_path}"
+                    f"Model bulunamadı: {model_path}. Model eğitmek için: python train_model.py {ticker} --period 2y"
                 )
         else:
             # Model kullanılmayacak - rule-based

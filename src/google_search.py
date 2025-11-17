@@ -190,38 +190,66 @@ def search_market_news(keywords: List[str], num_results: int = 10,
     num_results : int
         Her anahtar kelime için kaç sonuç (varsayılan: 10)
     api_key : str, optional
-        Google Custom Search API anahtarı
+        Google Custom Search API anahtarı. Eğer None ise .env'den okunur.
     search_engine_id : str, optional
-        Google Custom Search Engine ID
+        Google Custom Search Engine ID. Eğer None ise .env'den okunur.
     
     Döndürür:
     --------
     list
-        Tüm haberler (duplicate'ler filtrelenmiş)
+        Tüm haberler (duplicate'ler filtrelenmiş). API key yoksa boş liste döner.
     """
     
-    all_results = []
-    seen_links = set()
+    # API key ve Engine ID'yi .env'den al (eğer parametre olarak verilmemişse)
+    if api_key is None:
+        api_key = os.getenv('GOOGLE_CSE_API_KEY') or os.getenv('GOOGLE_SEARCH_API_KEY')
+    if search_engine_id is None:
+        search_engine_id = os.getenv('GOOGLE_CSE_ID') or os.getenv('GOOGLE_SEARCH_ENGINE_ID')
     
-    # Anahtar kelimeleri birleştir
-    query = " VE ".join(keywords)
+    # API key veya Engine ID yoksa hata fırlatma, sadece uyarı log'u bas ve boş liste döndür
+    if not api_key or not search_engine_id:
+        print("⚠️  Google Search API key veya Engine ID bulunamadı.")
+        print("   Google Search özelliği devre dışı. Sadece NewsAPI kullanılacak.")
+        print("   💡 Google Custom Search API key almak için: https://developers.google.com/custom-search/v1/overview")
+        return []
     
-    results = search_google_news(
-        query=query,
-        num_results=num_results,
-        api_key=api_key,
-        search_engine_id=search_engine_id
-    )
-    
-    # Duplicate'leri filtrele
-    for result in results:
-        link = result.get('link', '')
-        if link not in seen_links:
-            seen_links.add(link)
-            all_results.append(result)
-    
-    print(f"✅ Toplam {len(all_results)} benzersiz haber bulundu.")
-    return all_results
+    try:
+        all_results = []
+        seen_links = set()
+        
+        # Anahtar kelimeleri birleştir
+        query = " ".join(keywords)  # "VE" yerine boşluk kullan (daha esnek arama)
+        
+        results = search_google_news(
+            query=query,
+            num_results=num_results,
+            api_key=api_key,
+            search_engine_id=search_engine_id
+        )
+        
+        # Duplicate'leri filtrele
+        for result in results:
+            link = result.get('link', '')
+            if link not in seen_links:
+                seen_links.add(link)
+                # Formatı normalize et (published_at ekle)
+                normalized_result = {
+                    "title": result.get('title', ''),
+                    "link": link,
+                    "snippet": result.get('snippet', ''),
+                    "source": result.get('source', _extract_domain(link)),
+                    "published_at": result.get('date')  # datetime veya None
+                }
+                all_results.append(normalized_result)
+        
+        if all_results:
+            print(f"✅ Google Search'ten {len(all_results)} benzersiz haber bulundu.")
+        return all_results
+        
+    except Exception as e:
+        print(f"⚠️  Google Search hatası: {e}")
+        print("   Google Search özelliği devre dışı. Sadece NewsAPI kullanılacak.")
+        return []
 
 
 if __name__ == "__main__":

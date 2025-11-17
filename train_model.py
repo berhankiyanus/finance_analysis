@@ -59,8 +59,8 @@ def main():
     
     # Model kayıt yolu
     if args.save_path is None:
-        models_dir = Path('models')
-        models_dir.mkdir(exist_ok=True)
+        from src.utils import ensure_directory_exists
+        models_dir = ensure_directory_exists('models')
         args.save_path = str(models_dir / f'price_predictor_{args.ticker.lower().replace(".", "_")}.pkl')
     
     try:
