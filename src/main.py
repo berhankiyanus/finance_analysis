@@ -75,7 +75,7 @@ def analyze_company(
     
     # Haberler
     print("   📰 Haberler çekiliyor...")
-    news_df = get_news(company_name, days_back=days_back)
+    news_df = get_news(company_name, days_back=days_back, ticker=ticker)
     
     # Fiyat verisi
     print("   💰 Fiyat verisi çekiliyor...")

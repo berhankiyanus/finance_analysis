@@ -259,34 +259,69 @@ def generate_detailed_report(
     
     # 2. HABER ANALİZİ
     if not news_df.empty and 'sentiment_class' in news_df.columns:
-        # Pozitif haberler
-        positive_news = news_df[news_df['sentiment_class'] == 'positive'].copy()
-        negative_news = news_df[news_df['sentiment_class'] == 'negative'].copy()
-        neutral_news = news_df[news_df['sentiment_class'] == 'neutral'].copy()
+        # Alakasız haberleri filtrele (relevance score kontrolü)
+        news_df_filtered = news_df.copy()
+        if 'relevance_score' in news_df_filtered.columns:
+            # Sadece alakalı haberleri kullan (0.3'ten yüksek relevance)
+            news_df_filtered = news_df_filtered[news_df_filtered['relevance_score'] >= 0.3].copy()
+        
+        # Pozitif haberler (sadece alakalı olanlar)
+        positive_news = news_df_filtered[news_df_filtered['sentiment_class'] == 'positive'].copy()
+        negative_news = news_df_filtered[news_df_filtered['sentiment_class'] == 'negative'].copy()
+        neutral_news = news_df_filtered[news_df_filtered['sentiment_class'] == 'neutral'].copy()
+        
+        # Toplam haber sayısı (sadece alakalı olanlar)
+        total_relevant_news = len(news_df_filtered)
         
         # En etkili haberler (yüksek confidence + yeni tarih)
         if not news_df.empty and 'published_at' in news_df.columns:
             # DataFrame'i kopyala (değişiklik yapmak için)
             news_df_work = news_df.copy()
             
+            # Relevance score kontrolü - alakasız haberleri filtrele
+            if 'relevance_score' in news_df_work.columns:
+                # Sadece yüksek relevance score'a sahip haberleri göster (0.3'ten yüksek)
+                news_df_work = news_df_work[news_df_work['relevance_score'] >= 0.3].copy()
+            
             # Tarih farkını hesapla (gün cinsinden)
-            max_date = news_df_work['published_at'].max()
-            if pd.notna(max_date):
+            max_date = news_df_work['published_at'].max() if not news_df_work.empty else None
+            if pd.notna(max_date) and not news_df_work.empty:
                 news_df_work['days_ago'] = (max_date - news_df_work['published_at']).dt.days
                 max_days = news_df_work['days_ago'].max() if news_df_work['days_ago'].max() > 0 else 30
                 # Yeni haberler daha yüksek ağırlık alır
                 news_df_work['recency_score'] = 1 - (news_df_work['days_ago'] / max(max_days, 1))
                 news_df_work['recency_score'] = news_df_work['recency_score'].clip(0, 1)
                 
-                # Impact score: confidence (70%) + recency (30%)
+                # Relevance score'u normalize et (0-1 arası)
+                if 'relevance_score' in news_df_work.columns:
+                    relevance_norm = news_df_work['relevance_score'].clip(0, 1)
+                else:
+                    relevance_norm = pd.Series([1.0] * len(news_df_work), index=news_df_work.index)
+                
+                # Impact score: relevance (40%) + confidence (40%) + recency (20%)
+                # Alakalı haberler daha yüksek impact alır
                 news_df_work['impact_score'] = (
-                    news_df_work['sentiment_confidence'] * 0.7 + 
-                    news_df_work['recency_score'] * 0.3
+                    relevance_norm * 0.4 + 
+                    news_df_work['sentiment_confidence'] * 0.4 + 
+                    news_df_work['recency_score'] * 0.2
                 )
             else:
-                news_df_work['impact_score'] = news_df_work['sentiment_confidence']
+                # Relevance score varsa onu kullan
+                if 'relevance_score' in news_df_work.columns:
+                    relevance_norm = news_df_work['relevance_score'].clip(0, 1)
+                    news_df_work['impact_score'] = (
+                        relevance_norm * 0.5 + 
+                        news_df_work['sentiment_confidence'] * 0.5
+                    )
+                else:
+                    news_df_work['impact_score'] = news_df_work['sentiment_confidence']
             
-            top_news = news_df_work.nlargest(5, 'impact_score')
+            # En etkili haberleri seç (en az 5 haber, ama daha fazla varsa 10'a kadar)
+            top_count = min(10, len(news_df_work))
+            if top_count > 0:
+                top_news = news_df_work.nlargest(top_count, 'impact_score')
+            else:
+                top_news = pd.DataFrame()
             
             report['news_analysis'] = []
             for idx, row in top_news.iterrows():
@@ -304,12 +339,25 @@ def generate_detailed_report(
                     'impact': 'Yüksek' if row['impact_score'] > 0.7 else 'Orta' if row['impact_score'] > 0.4 else 'Düşük'
                 })
         
-        # Haber istatistikleri
+        # Haber istatistikleri (sadece alakalı haberler)
         summary_parts.append("### 📰 Haber Analizi Özeti")
-        summary_parts.append(f"- **Toplam Haber:** {len(news_df)}")
-        summary_parts.append(f"- **Pozitif Haberler:** {len(positive_news)} ({len(positive_news)/len(news_df)*100:.1f}%)")
-        summary_parts.append(f"- **Negatif Haberler:** {len(negative_news)} ({len(negative_news)/len(news_df)*100:.1f}%)")
-        summary_parts.append(f"- **Nötr Haberler:** {len(neutral_news)} ({len(neutral_news)/len(news_df)*100:.1f}%)")
+        if total_relevant_news > 0:
+            summary_parts.append(f"- **Toplam Alakalı Haber:** {total_relevant_news}")
+            pos_pct = (len(positive_news)/total_relevant_news*100) if total_relevant_news > 0 else 0
+            neg_pct = (len(negative_news)/total_relevant_news*100) if total_relevant_news > 0 else 0
+            neu_pct = (len(neutral_news)/total_relevant_news*100) if total_relevant_news > 0 else 0
+            summary_parts.append(f"- **Pozitif Haberler:** {len(positive_news)} ({pos_pct:.1f}%)")
+            summary_parts.append(f"- **Negatif Haberler:** {len(negative_news)} ({neg_pct:.1f}%)")
+            summary_parts.append(f"- **Nötr Haberler:** {len(neutral_news)} ({neu_pct:.1f}%)")
+        else:
+            total_news = len(news_df) if not news_df.empty else 0
+            summary_parts.append(f"- **Toplam Haber:** {total_news}")
+            pos_pct = (len(positive_news)/total_news*100) if total_news > 0 else 0
+            neg_pct = (len(negative_news)/total_news*100) if total_news > 0 else 0
+            neu_pct = (len(neutral_news)/total_news*100) if total_news > 0 else 0
+            summary_parts.append(f"- **Pozitif Haberler:** {len(positive_news)} ({pos_pct:.1f}%)")
+            summary_parts.append(f"- **Negatif Haberler:** {len(negative_news)} ({neg_pct:.1f}%)")
+            summary_parts.append(f"- **Nötr Haberler:** {len(neutral_news)} ({neu_pct:.1f}%)")
         summary_parts.append(f"- **Sentiment Skoru:** {sentiment_score:.1f}/100\n")
         
         # Sentiment yorumu

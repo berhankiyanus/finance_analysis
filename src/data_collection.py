@@ -21,7 +21,7 @@ env_path = project_root / '.env'
 load_dotenv(dotenv_path=env_path)
 
 
-def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = None) -> pd.DataFrame:
+def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = None, ticker: Optional[str] = None) -> pd.DataFrame:
     """
     Şirket hakkında son haberleri toplar.
     
@@ -33,6 +33,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         Kaç gün geriye gidilecek (varsayılan: 30)
     api_key : str, optional
         NewsAPI key'i. Eğer verilmezse .env dosyasından okunur.
+    ticker : str, optional
+        Borsa kodu (örn: "AAPL", "MSFT"). Relevance hesaplamasında kullanılır.
     
     Döndürür:
     --------
@@ -77,9 +79,22 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         # Arama terimlerini hazırla (farklı varyasyonlar dene)
         search_terms = [company_name]
         
+        # Ticker sembolü varsa arama terimlerine ekle
+        if ticker:
+            search_terms.append(ticker)
+            # Ticker'ın küçük harfli versiyonunu da ekle
+            if ticker.isupper():
+                search_terms.append(ticker.lower())
+        
         # Eğer şirket adı büyük harflerle yazılmışsa (ticker sembolü olabilir), küçük harfe çevir
         if company_name.isupper() and len(company_name) <= 5:
-            search_terms.append(company_name.lower())
+            if company_name not in search_terms:  # Zaten eklenmemişse
+                search_terms.append(company_name.lower())
+        
+        # Şirket adı ve ticker'ı birleştirerek de ara (örn: "Apple AAPL")
+        if ticker and company_name:
+            combined_search = f"{company_name} {ticker}"
+            search_terms.append(combined_search)
         
         # NewsAPI'den haber çek - farklı stratejiler dene
         articles = []
@@ -193,14 +208,61 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 continue  # Geçersiz title'ı atla
             
             try:
+                summary = article.get('description', '').strip() if article.get('description') else ''
+                content = article.get('content', '').strip() if article.get('content') else ''
+                
+                # Relevance score hesapla - şirket adı ve ticker'ın haber içinde geçip geçmediğini kontrol et
+                company_lower = company_name.lower()
+                title_lower = title.lower()
+                summary_lower = summary.lower()
+                content_lower = content.lower()
+                
+                relevance_score = 0.0
+                
+                # 1. Başlıkta şirket adı geçiyorsa yüksek relevance
+                if company_lower in title_lower:
+                    relevance_score += 0.5
+                
+                # 2. Özet veya içerikte şirket adı geçiyorsa orta relevance
+                if company_lower in summary_lower or company_lower in content_lower:
+                    relevance_score += 0.3
+                
+                # 3. Ticker sembolü kontrolü (büyük harflerle)
+                # Eğer ticker parametresi verilmişse kullan, yoksa company_name'in kendisi ticker olabilir
+                ticker_to_check = ticker if ticker else (company_name if company_name.isupper() and len(company_name) <= 5 else None)
+                
+                if ticker_to_check:
+                    ticker_upper = ticker_to_check.upper()
+                    # Başlıkta ticker geçiyorsa yüksek relevance
+                    if ticker_upper in title:
+                        relevance_score += 0.4
+                    # Özet veya içerikte ticker geçiyorsa orta relevance
+                    if ticker_upper in summary or ticker_upper in content:
+                        relevance_score += 0.3
+                    # Ticker'ın küçük harfli versiyonu da kontrol et
+                    ticker_lower = ticker_to_check.lower()
+                    if ticker_lower in title_lower or ticker_lower in summary_lower or ticker_lower in content_lower:
+                        relevance_score += 0.2
+                
+                # 4. Şirket adının kısaltılmış versiyonları (örn: "Apple Inc." -> "Apple")
+                # Şirket adında boşluk varsa, ilk kelimeyi de kontrol et
+                if ' ' in company_name:
+                    first_word = company_name.split()[0].lower()
+                    if first_word in title_lower or first_word in summary_lower or first_word in content_lower:
+                        relevance_score += 0.1
+                
+                # Eğer relevance çok düşükse (0.3'ten az), haber alakasız olabilir - atla
+                if relevance_score < 0.3:
+                    continue  # Alakasız haberi atla
+                
                 news_list.append({
                     'title': title,
-                    'summary': article.get('description', '').strip() if article.get('description') else '',
-                    'content': article.get('content', '').strip() if article.get('content') else '',
+                    'summary': summary,
+                    'content': content,
                     'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
                     'source': article.get('source', {}).get('name', 'Unknown') if isinstance(article.get('source'), dict) else 'Unknown',
                     'url': article.get('url', '').strip() if article.get('url') else '',
-                    'relevance_score': 1.0  # NewsAPI zaten filtreleme yapıyor
+                    'relevance_score': relevance_score
                 })
             except Exception as e:
                 print(f"⚠️  Haber işlenirken hata: {e}")

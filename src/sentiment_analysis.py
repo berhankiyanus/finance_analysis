@@ -130,28 +130,35 @@ class SentimentAnalyzer:
             neu_prob = float(probs[2])
             
             # FinBERT modelinin çıktılarını daha iyi yorumla
-            # Model zaten metni anlıyor, sadece threshold'u düşürmemiz gerekiyor
+            # Model zaten metni anlıyor, threshold'u çok düşük tutuyoruz
             
-            # Eğer neutral olasılığı yüksekse ama pozitif/negatif arasında anlamlı fark varsa,
-            # pozitif/negatif'i tercih et (model metni anlamış demektir)
-            if predicted_class == 'neutral':
-                # Pozitif ve negatif arasındaki farka bak
-                diff = abs(pos_prob - neg_prob)
-                
-                # Eğer pozitif veya negatif olasılığı neutral'dan daha yüksekse ve fark anlamlıysa
-                if pos_prob > neu_prob and pos_prob > neg_prob + 0.05:  # %5'ten fazla fark
+            # Her zaman pozitif/negatif olasılıklarını kontrol et
+            # Neutral sadece gerçekten nötr olduğunda seçilmeli
+            diff = abs(pos_prob - neg_prob)
+            
+            # Eğer pozitif veya negatif olasılığı neutral'dan daha yüksekse, onu tercih et
+            if pos_prob > neu_prob and pos_prob > neg_prob:
+                predicted_class = 'positive'
+                confidence = pos_prob
+            elif neg_prob > neu_prob and neg_prob > pos_prob:
+                predicted_class = 'negative'
+                confidence = neg_prob
+            # Eğer neutral en yüksekse ama pozitif/negatif arasında anlamlı fark varsa
+            elif predicted_class == 'neutral' and diff > 0.08:  # %8'den fazla fark (çok agresif)
+                if pos_prob > neg_prob:
                     predicted_class = 'positive'
                     confidence = pos_prob
-                elif neg_prob > neu_prob and neg_prob > pos_prob + 0.05:  # %5'ten fazla fark
+                else:
                     predicted_class = 'negative'
                     confidence = neg_prob
-                elif diff > 0.10:  # %10'dan fazla fark varsa (daha agresif)
-                    if pos_prob > neg_prob:
-                        predicted_class = 'positive'
-                        confidence = pos_prob
-                    else:
-                        predicted_class = 'negative'
-                        confidence = neg_prob
+            # Eğer pozitif/negatif olasılıkları eşitse ama neutral'dan yüksekse
+            elif pos_prob > 0.25 or neg_prob > 0.25:  # En az %25 olasılık varsa
+                if pos_prob > neg_prob:
+                    predicted_class = 'positive'
+                    confidence = pos_prob
+                else:
+                    predicted_class = 'negative'
+                    confidence = neg_prob
             
             return {
                 'class': predicted_class,
@@ -287,19 +294,22 @@ def news_to_score(sentiment_result: Dict) -> float:
     confidence = sentiment_result.get('confidence', 0.5)
     
     # Pozitif ve negatif olasılıklar arasındaki farkı kullan
-    # Eğer neutral çok yüksekse ama pozitif/negatif arasında fark varsa, onu kullan
-    if neu_prob > 0.7:
-        # Neutral çok yüksek, ama pozitif/negatif farkına bak
-        diff = pos_prob - neg_prob
-        if abs(diff) > 0.1:  # %10'dan fazla fark varsa
-            return diff * confidence
-        else:
-            return 0.0
+    # Daha agresif: Neutral yüksek olsa bile, pozitif/negatif farkını kullan
+    diff = pos_prob - neg_prob
+    
+    # Eğer pozitif veya negatif olasılığı neutral'dan yüksekse, onu kullan
+    if pos_prob > neu_prob or neg_prob > neu_prob:
+        # Pozitif/negatif tercih edilmeli
+        score = diff * confidence
+        # Skoru normalize et (-1 ile +1 arası)
+        return max(-1.0, min(1.0, score))
+    elif abs(diff) > 0.05:  # %5'ten fazla fark varsa (çok agresif)
+        # Neutral yüksek ama fark var, yine de kullan
+        score = diff * confidence * 0.8  # Biraz daha düşük ağırlık
+        return max(-1.0, min(1.0, score))
     else:
-        # Normal durum: pozitif ve negatif olasılıklar arasındaki fark
-        score = pos_prob - neg_prob
-        # Confidence ile ağırlıklandır
-        return score * confidence
+        # Gerçekten nötr
+        return 0.0
 
 
 def aggregate_sentiment(news_df: pd.DataFrame) -> float:
@@ -320,24 +330,34 @@ def aggregate_sentiment(news_df: pd.DataFrame) -> float:
     if news_df.empty or 'sentiment_score' not in news_df.columns:
         return 50.0  # Nötr skor
     
+    # Alakasız haberleri filtrele (relevance score kontrolü)
+    news_df_filtered = news_df.copy()
+    if 'relevance_score' in news_df_filtered.columns:
+        # Sadece alakalı haberleri kullan (0.3'ten yüksek relevance)
+        news_df_filtered = news_df_filtered[news_df_filtered['relevance_score'] >= 0.3].copy()
+    
+    # Eğer filtreleme sonrası haber kalmadıysa, tüm haberleri kullan
+    if news_df_filtered.empty:
+        news_df_filtered = news_df.copy()
+    
     # Daha yeni haberler daha yüksek ağırlık alır
-    if 'published_at' in news_df.columns:
-        min_date = news_df['published_at'].min()
-        max_date = news_df['published_at'].max()
+    if 'published_at' in news_df_filtered.columns:
+        min_date = news_df_filtered['published_at'].min()
+        max_date = news_df_filtered['published_at'].max()
         
         if (max_date - min_date).days > 0:
             # Her haber için ağırlık: (gün farkı + 1) / max_gün_farkı
-            news_df['days_from_min'] = (news_df['published_at'] - min_date).dt.days + 1
-            max_days = news_df['days_from_min'].max()
-            news_df['weight'] = news_df['days_from_min'] / max_days
+            news_df_filtered['days_from_min'] = (news_df_filtered['published_at'] - min_date).dt.days + 1
+            max_days = news_df_filtered['days_from_min'].max()
+            news_df_filtered['weight'] = news_df_filtered['days_from_min'] / max_days
         else:
-            news_df['weight'] = 1.0
+            news_df_filtered['weight'] = 1.0
     else:
-        news_df['weight'] = 1.0
+        news_df_filtered['weight'] = 1.0
     
     # Ağırlıklı ortalama
-    weighted_sum = (news_df['sentiment_score'] * news_df['weight']).sum()
-    total_weight = news_df['weight'].sum()
+    weighted_sum = (news_df_filtered['sentiment_score'] * news_df_filtered['weight']).sum()
+    total_weight = news_df_filtered['weight'].sum()
     
     if total_weight == 0:
         weighted_avg = 0.0
