@@ -1057,6 +1057,14 @@ elif page == "💼 Portföy Optimizasyonu":
                                 try:
                                     df = get_price_data(ticker, period=period)
                                     if not df.empty and 'close' in df.columns:
+                                        # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
+                                        if 'date' in df.columns:
+                                            df = df.set_index('date')
+                                            df.index = pd.to_datetime(df.index)
+                                        elif not isinstance(df.index, pd.DatetimeIndex):
+                                            # Index zaten datetime değilse, datetime'a çevir
+                                            df.index = pd.to_datetime(df.index)
+                                        
                                         price_data[ticker] = df['close']
                                 except Exception as e:
                                     st.warning(f"⚠️ {ticker} için veri çekilemedi: {e}")
@@ -1066,6 +1074,20 @@ elif page == "💼 Portföy Optimizasyonu":
                             else:
                                 # DataFrame oluştur
                                 price_df = pd.DataFrame(price_data)
+                                
+                                # Index'i DatetimeIndex'e çevir (eğer değilse)
+                                if not isinstance(price_df.index, pd.DatetimeIndex):
+                                    # Tüm Series'lerin index'lerini birleştir
+                                    all_dates = set()
+                                    for series in price_data.values():
+                                        all_dates.update(series.index)
+                                    
+                                    # Yeni index oluştur
+                                    new_index = pd.DatetimeIndex(sorted(all_dates))
+                                    price_df = price_df.reindex(new_index)
+                                
+                                # Eksik değerleri forward fill ile doldur (sonra dropna yapılacak)
+                                price_df = price_df.ffill().dropna()
                                 
                                 # Optimizasyon yap
                                 weights = calculate_optimal_portfolio_weights(
