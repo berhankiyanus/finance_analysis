@@ -327,24 +327,55 @@ def find_arbitrage_opportunities(
         # Index'i datetime'a çevir (eğer 'date' kolonu varsa)
         if 'date' in df1.columns:
             df1 = df1.set_index('date')
-            df1.index = pd.to_datetime(df1.index)
         if 'date' in df2.columns:
             df2 = df2.set_index('date')
-            df2.index = pd.to_datetime(df2.index)
         
-        # Index'i DatetimeIndex'e çevir (eğer değilse)
+        # Index'i DatetimeIndex'e çevir ve normalize et (sadece tarih, saat olmadan)
         if not isinstance(df1.index, pd.DatetimeIndex):
             df1.index = pd.to_datetime(df1.index)
         if not isinstance(df2.index, pd.DatetimeIndex):
             df2.index = pd.to_datetime(df2.index)
         
-        # Tarihleri hizala
-        common_dates = df1.index.intersection(df2.index)
-        if len(common_dates) < 30:
-            return {'error': f'Yeterli ortak veri noktası yok (sadece {len(common_dates)} gün)'}
+        # Tarihleri normalize et (sadece tarih kısmı)
+        df1.index = df1.index.normalize()
+        df2.index = df2.index.normalize()
         
-        prices1 = df1.loc[common_dates, 'close']
-        prices2 = df2.loc[common_dates, 'close']
+        # 'close' kolonunu kontrol et
+        if 'close' not in df1.columns:
+            return {'error': f'{ticker1} için "close" kolonu bulunamadı. Mevcut kolonlar: {list(df1.columns)}'}
+        if 'close' not in df2.columns:
+            return {'error': f'{ticker2} için "close" kolonu bulunamadı. Mevcut kolonlar: {list(df2.columns)}'}
+        
+        # Tarihleri hizala - daha esnek yaklaşım
+        # Önce intersection dene
+        common_dates = df1.index.intersection(df2.index)
+        
+        # Eğer intersection yeterli değilse, reindex ile birleştir
+        if len(common_dates) < 30:
+            # Tüm tarihleri birleştir
+            all_dates = df1.index.union(df2.index).sort_values()
+            
+            # Her iki DataFrame'i aynı index'e göre reindex et
+            df1_reindexed = df1.reindex(all_dates)
+            df2_reindexed = df2.reindex(all_dates)
+            
+            # Eksik değerleri forward fill ile doldur
+            df1_reindexed = df1_reindexed.ffill()
+            df2_reindexed = df2_reindexed.ffill()
+            
+            # Hala eksik değerleri drop et
+            valid_mask = df1_reindexed['close'].notna() & df2_reindexed['close'].notna()
+            df1_reindexed = df1_reindexed[valid_mask]
+            df2_reindexed = df2_reindexed[valid_mask]
+            
+            if len(df1_reindexed) < 30:
+                return {'error': f'Yeterli ortak veri noktası yok (sadece {len(df1_reindexed)} gün). {ticker1}: {len(df1)} gün, {ticker2}: {len(df2)} gün'}
+            
+            prices1 = df1_reindexed['close']
+            prices2 = df2_reindexed['close']
+        else:
+            prices1 = df1.loc[common_dates, 'close']
+            prices2 = df2.loc[common_dates, 'close']
         
         # Fiyat oranı (spread)
         ratio = prices1 / prices2
