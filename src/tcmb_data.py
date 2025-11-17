@@ -197,6 +197,29 @@ def get_inflation_tufe(months: int = 24, api_key: Optional[str] = None) -> pd.Da
     return get_tcmb_data('TP.FG.T1', start_date, end_date, api_key)
 
 
+def get_usd_try_rate(months: int = 24, api_key: Optional[str] = None) -> pd.DataFrame:
+    """
+    USD/TRY kuru verisini çeker.
+    
+    Parametreler:
+    ------------
+    months : int
+        Kaç aylık veri (varsayılan: 24)
+    api_key : str, optional
+        TCMB EVDS API anahtarı
+    
+    Döndürür:
+    --------
+    pd.DataFrame
+        Tarih ve USD/TRY kuru
+    """
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=months * 30)).strftime('%Y-%m-%d')
+    
+    # TCMB EVDS seri kodu: TP.DK.USD.A (USD/TRY Alış)
+    return get_tcmb_data('TP.DK.USD.A', start_date, end_date, api_key)
+
+
 def get_macroeconomic_indicators(api_key: Optional[str] = None) -> Dict[str, pd.DataFrame]:
     """
     Birden fazla makroekonomik göstergeyi çeker.
@@ -215,6 +238,7 @@ def get_macroeconomic_indicators(api_key: Optional[str] = None) -> Dict[str, pd.
     indicators = {
         'policy_rate': get_policy_rate(api_key=api_key),
         'inflation_tufe': get_inflation_tufe(api_key=api_key),
+        'usd_try_rate': get_usd_try_rate(api_key=api_key),
     }
     
     return indicators
