@@ -11,9 +11,49 @@ from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 # Proje kök dizinini path'e ekle
 sys.path.insert(0, str(Path(__file__).parent))
+
+# API Key'i yükle - önce Streamlit secrets'tan, sonra .env'den
+NEWS_API_KEY = None
+
+# 1. Streamlit Cloud secrets'tan dene (web ortamı için)
+try:
+    if hasattr(st, 'secrets') and 'NEWS_API_KEY' in st.secrets:
+        NEWS_API_KEY = st.secrets['NEWS_API_KEY']
+        os.environ['NEWS_API_KEY'] = NEWS_API_KEY
+        st.sidebar.success("✅ API Key Streamlit secrets'tan yüklendi")
+except:
+    pass
+
+# 2. .env dosyasından dene (local için)
+if NEWS_API_KEY is None:
+    project_root = Path(__file__).parent
+    env_path = project_root / '.env'
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+        NEWS_API_KEY = os.getenv('NEWS_API_KEY')
+        if NEWS_API_KEY:
+            st.sidebar.success("✅ API Key .env dosyasından yüklendi")
+        else:
+            st.sidebar.warning("⚠️ .env dosyası var ama NEWS_API_KEY bulunamadı")
+    else:
+        st.sidebar.warning("⚠️ .env dosyası bulunamadı")
+
+# 3. Environment variable'dan dene (genel)
+if NEWS_API_KEY is None:
+    NEWS_API_KEY = os.getenv('NEWS_API_KEY')
+    if NEWS_API_KEY:
+        st.sidebar.info("ℹ️ API Key environment variable'dan yüklendi")
+
+# Son kontrol
+if NEWS_API_KEY is None:
+    st.sidebar.error("❌ NEWS_API_KEY bulunamadı! Lütfen Streamlit secrets veya .env dosyasına ekleyin.")
+else:
+    # API key'i environment'a set et
+    os.environ['NEWS_API_KEY'] = NEWS_API_KEY
 
 from src.main import analyze_company
 from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
@@ -121,7 +161,7 @@ if page == "🏠 Ana Sayfa - Analiz":
             financial_weight = financial_weight / total_weight if total_weight > 0 else 0.6
         
         # Analiz butonu
-        analyze_button = st.button("🔍 Analiz Yap", type="primary", use_container_width=True)
+        analyze_button = st.button("🔍 Analiz Yap", type="primary", width='stretch')
     
     with col2:
         st.subheader("📊 Sonuçlar")
@@ -218,12 +258,12 @@ if page == "🏠 Ana Sayfa - Analiz":
                                     with st.container():
                                         col1, col2 = st.columns([1, 4])
                                         with col1:
-                                            st.write(f"{news['sentiment_emoji']} **{news['sentiment'].upper()}**")
-                                            st.caption(f"Etki: {news['impact']}")
-                                            st.caption(f"Güven: {news['confidence']:.1%}")
+                                            st.write(f"{news.get('sentiment_emoji', '🟡')} **{news.get('sentiment', 'neutral').upper()}**")
+                                            st.caption(f"Etki: {news.get('impact', 'Orta')}")
+                                            st.caption(f"Güven: {news.get('confidence', 0.0):.1%}")
                                         with col2:
-                                            st.write(f"**{news['title']}**")
-                                            st.caption(f"📅 {news['date']}")
+                                            st.write(f"**{news.get('title', 'Başlık yok')}**")
+                                            st.caption(f"📅 {news.get('date', 'Bilinmiyor')}")
                                         st.divider()
                             
                             # Finansal faktörler
@@ -315,7 +355,7 @@ if page == "🏠 Ana Sayfa - Analiz":
                             fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
                             fig.update_yaxes(title_text="Hacim", row=2, col=1)
                             
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width='stretch')
                         
                         # Haber sentiment dağılımı
                         if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
@@ -337,16 +377,22 @@ if page == "🏠 Ana Sayfa - Analiz":
                                 height=300
                             )
                             
-                            st.plotly_chart(fig_sentiment, use_container_width=True)
+                            st.plotly_chart(fig_sentiment, width='stretch')
                             
                             # Haber listesi
                             with st.expander("📰 Haberler"):
                                 for idx, row in news_df.head(10).iterrows():
-                                    emoji = "🟢" if row['sentiment_class'] == 'positive' else \
-                                           "🔴" if row['sentiment_class'] == 'negative' else "🟡"
-                                    st.write(f"{emoji} **{row['title']}**")
-                                    st.caption(f"Sentiment: {row['sentiment_class']} ({row['sentiment_confidence']:.1%}) | "
-                                             f"Kaynak: {row.get('source', 'Unknown')}")
+                                    # Güvenli kolon erişimi
+                                    title = row.get('title', 'Başlık yok')
+                                    sentiment_class = row.get('sentiment_class', 'neutral')
+                                    sentiment_confidence = row.get('sentiment_confidence', 0.0)
+                                    source = row.get('source', 'Unknown')
+                                    
+                                    emoji = "🟢" if sentiment_class == 'positive' else \
+                                           "🔴" if sentiment_class == 'negative' else "🟡"
+                                    st.write(f"{emoji} **{title}**")
+                                    st.caption(f"Sentiment: {sentiment_class} ({sentiment_confidence:.1%}) | "
+                                             f"Kaynak: {source}")
                                     st.write("---")
                         
                         # Skor karşılaştırması
@@ -371,7 +417,7 @@ if page == "🏠 Ana Sayfa - Analiz":
                             height=300
                         )
                         
-                        st.plotly_chart(fig_scores, use_container_width=True)
+                        st.plotly_chart(fig_scores, width='stretch')
                         
                     except Exception as e:
                         st.error(f"❌ Hata oluştu: {str(e)}")
@@ -414,7 +460,7 @@ elif page == "🤖 Model Eğitimi":
             help="Kaç gün sonrasını tahmin edeceğiz"
         )
         
-        train_button = st.button("🚀 Model Eğit", type="primary", use_container_width=True)
+        train_button = st.button("🚀 Model Eğit", type="primary", width='stretch')
     
     with col2:
         st.subheader("📊 Eğitim Sonuçları")
@@ -439,7 +485,7 @@ elif page == "🤖 Model Eğitimi":
                         importance_df = predictor.get_feature_importance()
                         
                         st.subheader("📈 En Önemli Feature'lar")
-                        st.dataframe(importance_df.head(10), use_container_width=True)
+                        st.dataframe(importance_df.head(10), width='stretch')
                         
                         # Feature importance grafiği
                         fig_importance = go.Figure(data=[go.Bar(
@@ -455,7 +501,7 @@ elif page == "🤖 Model Eğitimi":
                             height=400
                         )
                         
-                        st.plotly_chart(fig_importance, use_container_width=True)
+                        st.plotly_chart(fig_importance, width='stretch')
                         
                     except Exception as e:
                         st.error(f"❌ Hata: {str(e)}")
