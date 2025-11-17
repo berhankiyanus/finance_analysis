@@ -19,7 +19,7 @@ try:
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import TimeSeriesSplit
     from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import StandardScaler, LabelEncoder
     import xgboost as xgb
     SKLEARN_AVAILABLE = True
 except ImportError:
@@ -48,6 +48,7 @@ class PriceDirectionPredictor:
         
         self.model_type = model_type
         self.scaler = StandardScaler()
+        self.label_encoder = LabelEncoder()
         self.model = None
         self.feature_names = None
         self.is_trained = False
@@ -229,6 +230,11 @@ class PriceDirectionPredictor:
         X_val_scaled = self.scaler.transform(X_val) if n_val > 0 else None
         X_test_scaled = self.scaler.transform(X_test)
         
+        # Label encoding: String değerleri sayısal değerlere dönüştür
+        y_train_encoded = self.label_encoder.fit_transform(y_train)
+        y_val_encoded = self.label_encoder.transform(y_val) if n_val > 0 else None
+        y_test_encoded = self.label_encoder.transform(y_test)
+        
         # Modeli eğit
         print(f"📚 Model eğitiliyor ({self.model_type})...")
         print(f"   Train seti: {len(X_train)} örnek")
@@ -236,19 +242,22 @@ class PriceDirectionPredictor:
             print(f"   Validation seti: {len(X_val)} örnek")
         print(f"   Test seti: {len(X_test)} örnek")
         
-        self.model.fit(X_train_scaled, y_train)
+        self.model.fit(X_train_scaled, y_train_encoded)
         self.is_trained = True
         
-        # Değerlendirme
-        train_pred = self.model.predict(X_train_scaled)
+        # Değerlendirme (tahminleri decode et)
+        train_pred_encoded = self.model.predict(X_train_scaled)
+        train_pred = self.label_encoder.inverse_transform(train_pred_encoded)
         train_acc = accuracy_score(y_train, train_pred)
         
         val_acc = None
         if X_val_scaled is not None:
-            val_pred = self.model.predict(X_val_scaled)
+            val_pred_encoded = self.model.predict(X_val_scaled)
+            val_pred = self.label_encoder.inverse_transform(val_pred_encoded)
             val_acc = accuracy_score(y_val, val_pred)
         
-        test_pred = self.model.predict(X_test_scaled)
+        test_pred_encoded = self.model.predict(X_test_scaled)
+        test_pred = self.label_encoder.inverse_transform(test_pred_encoded)
         test_acc = accuracy_score(y_test, test_pred)
         
         # Sonuçları topla
@@ -302,12 +311,15 @@ class PriceDirectionPredictor:
         X_scaled = self.scaler.transform(X)
         
         # Tahmin yap
-        prediction = self.model.predict(X_scaled)[0]
+        prediction_encoded = self.model.predict(X_scaled)[0]
         probabilities = self.model.predict_proba(X_scaled)[0]
         
-        # Sınıf isimleri
-        classes = self.model.classes_
-        prob_dict = {class_name: float(prob) for class_name, prob in zip(classes, probabilities)}
+        # Tahmini decode et (sayısal değerden string'e)
+        prediction = self.label_encoder.inverse_transform([prediction_encoded])[0]
+        
+        # Sınıf isimlerini decode et
+        class_names = self.label_encoder.inverse_transform(self.model.classes_)
+        prob_dict = {class_name: float(prob) for class_name, prob in zip(class_names, probabilities)}
         confidence = float(max(probabilities))
         
         return {
@@ -357,6 +369,7 @@ class PriceDirectionPredictor:
         model_data = {
             'model': self.model,
             'scaler': self.scaler,
+            'label_encoder': self.label_encoder,
             'feature_names': self.feature_names,
             'model_type': self.model_type,
             'is_trained': self.is_trained,
@@ -383,6 +396,7 @@ class PriceDirectionPredictor:
         
         self.model = model_data['model']
         self.scaler = model_data['scaler']
+        self.label_encoder = model_data.get('label_encoder', LabelEncoder())
         self.feature_names = model_data['feature_names']
         self.model_type = model_data['model_type']
         self.is_trained = model_data['is_trained']
