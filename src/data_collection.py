@@ -88,8 +88,29 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         response.raise_for_status()
         data = response.json()
         
+        # API yanıtını kontrol et
+        api_status = data.get('status', 'unknown')
+        if api_status != 'ok':
+            error_msg = data.get('message', 'Bilinmeyen hata')
+            error_code = data.get('code', 'Bilinmiyor')
+            print(f"❌ NewsAPI hatası: {error_msg} (Kod: {error_code})")
+            if error_code == 'apiKeyInvalid':
+                print("   ⚠️  API key geçersiz! Lütfen Streamlit secrets'taki NEWS_API_KEY'i kontrol edin.")
+            elif error_code == 'rateLimited':
+                print("   ⚠️  API limiti aşıldı! Ücretsiz plan günde 100 istek sınırına sahip.")
+            print("⚠️  Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
+        
         # DataFrame'e çevir
         articles = data.get('articles', [])
+        total_results = data.get('totalResults', 0)
+        
+        print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} haber döndürüldü")
+        
+        if not articles:
+            print(f"⚠️  NewsAPI'den {len(articles)} haber döndü. Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
+        
         news_list = []
         
         for article in articles:
@@ -105,15 +126,34 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         news_df = pd.DataFrame(news_list)
         
-        # Boş haberleri filtrele
-        news_df = news_df[news_df['title'].str.len() > 10]
+        # Boş DataFrame kontrolü
+        if news_df.empty:
+            print(f"⚠️  NewsAPI'den haber döndü ama liste boş. Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
+        
+        # Kolon kontrolü - 'title' kolonu yoksa hata ver
+        if 'title' not in news_df.columns:
+            print(f"⚠️  NewsAPI'den dönen veri formatı beklenenden farklı. Kolonlar: {list(news_df.columns)}")
+            print(f"⚠️  Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
+        
+        # Boş haberleri filtrele (güvenli şekilde)
+        if 'title' in news_df.columns:
+            news_df = news_df[news_df['title'].notna() & (news_df['title'].str.len() > 10)]
+        else:
+            print(f"⚠️  'title' kolonu bulunamadı. Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
         
         # Tarihe göre sırala (en yeni önce)
         if not news_df.empty and 'published_at' in news_df.columns:
             news_df = news_df.sort_values('published_at', ascending=False).reset_index(drop=True)
         
+        if news_df.empty:
+            print(f"⚠️  Filtreleme sonrası haber kalmadı. Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
+        
         print(f"✅ {len(news_df)} haber bulundu (bugün dahil son {days_back} gün).")
-        if not news_df.empty:
+        if not news_df.empty and 'published_at' in news_df.columns:
             latest_news_date = news_df['published_at'].max()
             print(f"   En yeni haber: {latest_news_date.strftime('%Y-%m-%d %H:%M')}")
         
