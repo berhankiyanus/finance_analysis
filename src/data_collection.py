@@ -123,22 +123,40 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         news_list = []
         
+        # Her bir article'ı güvenli şekilde işle
         for article in articles:
-            news_list.append({
-                'title': article.get('title', ''),
-                'summary': article.get('description', ''),
-                'content': article.get('content', ''),
-                'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
-                'source': article.get('source', {}).get('name', 'Unknown'),
-                'url': article.get('url', ''),
-                'relevance_score': 1.0  # NewsAPI zaten filtreleme yapıyor
-            })
+            if not article or not isinstance(article, dict):
+                continue  # Geçersiz article'ı atla
+            
+            # Title kontrolü - title yoksa veya çok kısaysa atla
+            title = article.get('title', '').strip() if article.get('title') else ''
+            if not title or len(title) < 10:
+                continue  # Geçersiz title'ı atla
+            
+            try:
+                news_list.append({
+                    'title': title,
+                    'summary': article.get('description', '').strip() if article.get('description') else '',
+                    'content': article.get('content', '').strip() if article.get('content') else '',
+                    'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
+                    'source': article.get('source', {}).get('name', 'Unknown') if isinstance(article.get('source'), dict) else 'Unknown',
+                    'url': article.get('url', '').strip() if article.get('url') else '',
+                    'relevance_score': 1.0  # NewsAPI zaten filtreleme yapıyor
+                })
+            except Exception as e:
+                print(f"⚠️  Haber işlenirken hata: {e}")
+                continue  # Bu article'ı atla ve devam et
+        
+        # DataFrame oluştur
+        if not news_list:
+            print(f"⚠️  NewsAPI'den haber döndü ama geçerli haber bulunamadı. Dummy veri kullanılıyor.")
+            return _get_dummy_news(company_name, days_back)
         
         news_df = pd.DataFrame(news_list)
         
         # Boş DataFrame kontrolü
         if news_df.empty:
-            print(f"⚠️  NewsAPI'den haber döndü ama liste boş. Dummy veri kullanılıyor.")
+            print(f"⚠️  NewsAPI'den haber döndü ama DataFrame boş. Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
         
         # Kolon kontrolü - 'title' kolonu yoksa hata ver
@@ -149,7 +167,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         # Boş haberleri filtrele (güvenli şekilde)
         if 'title' in news_df.columns:
-            news_df = news_df[news_df['title'].notna() & (news_df['title'].str.len() > 10)]
+            # NaN ve boş string kontrolü
+            news_df = news_df[news_df['title'].notna() & (news_df['title'].astype(str).str.len() > 10)]
         else:
             print(f"⚠️  'title' kolonu bulunamadı. Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
