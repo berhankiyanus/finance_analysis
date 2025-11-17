@@ -25,5 +25,6 @@ echo ""
 echo "⚠️  Durdurmak için: Ctrl+C"
 echo ""
 
-venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+# Python modülü olarak çalıştır (izin sorunlarını atlar)
+venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 

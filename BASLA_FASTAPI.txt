@@ -2,5 +2,8 @@
 # Bu dosyadaki komutları terminal'e kopyalayıp yapıştırın
 
 cd /Users/berhankiyanus/Desktop/Finance
-venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+
+# Alternatif (eğer yukarıdaki çalışmazsa):
+# venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 

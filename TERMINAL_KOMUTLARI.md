@@ -98,6 +98,17 @@ venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 Veya `BASLA_FASTAPI.txt` dosyasındaki komutları kopyalayıp yapıştırın.
 
+### "PermissionError: Operation not permitted: venv/pyvenv.cfg" Hatası
+
+Bu durumda **Python modülü olarak çalıştırın** (EN GÜVENİLİR YÖNTEM):
+
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Neden?** `venv/bin/python3 -m uvicorn` doğrudan Python modülü olarak çalıştırır ve izin sorunlarını atlar.
+
 ### "command not found: uvicorn" Hatası
 
 1. Virtual environment aktif mi kontrol edin:
