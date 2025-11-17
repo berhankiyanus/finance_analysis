@@ -197,7 +197,7 @@ st.markdown("---")
 st.sidebar.title("🎯 Menü")
 page = st.sidebar.radio(
     "Sayfa Seçin",
-    ["🏠 Ana Sayfa - Analiz", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
+    ["🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
 )
 
 # Ana Sayfa - Analiz
@@ -887,6 +887,249 @@ if page == "🏠 Ana Sayfa - Analiz":
                     except Exception as e:
                         st.error(f"❌ Hata oluştu: {str(e)}")
                         st.exception(e)
+
+# İzleme Listesi Sayfası
+elif page == "📋 İzleme Listesi":
+    st.header("📋 İzleme Listesi")
+    st.write("Takip etmek istediğiniz hisse senetlerini ekleyin ve yönetin.")
+    
+    try:
+        from src.firestore_watchlist import get_firestore_client, save_watchlist, get_watchlist
+        
+        # Basit kullanıcı ID (gerçek uygulamada authentication olmalı)
+        user_id = st.text_input("Kullanıcı ID", value="default_user", help="Geçici kullanıcı ID (gerçek uygulamada oturum açma olmalı)")
+        
+        db = get_firestore_client()
+        
+        if db:
+            # Mevcut watchlist'i yükle
+            current_watchlist = get_watchlist(user_id) or []
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.subheader("📊 İzleme Listesi")
+                if current_watchlist:
+                    watchlist_df = pd.DataFrame({
+                        'Ticker': current_watchlist,
+                        'Durum': ['✅ Aktif'] * len(current_watchlist)
+                    })
+                    st.dataframe(watchlist_df, use_container_width=True)
+                else:
+                    st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
+            
+            with col2:
+                st.subheader("➕ Hisse Ekle")
+                new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker")
+                
+                if st.button("➕ Ekle", type="primary"):
+                    if new_ticker:
+                        new_ticker = new_ticker.upper().strip()
+                        if new_ticker not in current_watchlist:
+                            current_watchlist.append(new_ticker)
+                            if save_watchlist(user_id, current_watchlist):
+                                st.success(f"✅ {new_ticker} eklendi!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Kaydetme hatası!")
+                        else:
+                            st.warning(f"⚠️ {new_ticker} zaten listede!")
+                    else:
+                        st.warning("⚠️ Lütfen bir ticker girin!")
+                
+                # Silme
+                if current_watchlist:
+                    st.subheader("🗑️ Hisse Sil")
+                    ticker_to_remove = st.selectbox("Silinecek Ticker", current_watchlist, key="remove_ticker")
+                    if st.button("🗑️ Sil", type="secondary"):
+                        current_watchlist.remove(ticker_to_remove)
+                        if save_watchlist(user_id, current_watchlist):
+                            st.success(f"✅ {ticker_to_remove} silindi!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Silme hatası!")
+        else:
+            st.warning("⚠️ Firestore bağlantısı kurulamadı. İzleme listesi özelliği kullanılamıyor.")
+            st.info("💡 Firestore kullanmak için Google Cloud credentials ayarlayın.")
+            
+            # Basit local watchlist (Firestore yoksa)
+            if 'local_watchlist' not in st.session_state:
+                st.session_state.local_watchlist = []
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.subheader("📊 İzleme Listesi (Local)")
+                if st.session_state.local_watchlist:
+                    watchlist_df = pd.DataFrame({
+                        'Ticker': st.session_state.local_watchlist,
+                        'Durum': ['✅ Aktif'] * len(st.session_state.local_watchlist)
+                    })
+                    st.dataframe(watchlist_df, use_container_width=True)
+                else:
+                    st.info("📝 Henüz izleme listesi oluşturulmamış.")
+            
+            with col2:
+                st.subheader("➕ Hisse Ekle")
+                new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker_local")
+                
+                if st.button("➕ Ekle", type="primary", key="add_local"):
+                    if new_ticker:
+                        new_ticker = new_ticker.upper().strip()
+                        if new_ticker not in st.session_state.local_watchlist:
+                            st.session_state.local_watchlist.append(new_ticker)
+                            st.success(f"✅ {new_ticker} eklendi!")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ {new_ticker} zaten listede!")
+                
+                if st.session_state.local_watchlist:
+                    ticker_to_remove = st.selectbox("Silinecek Ticker", st.session_state.local_watchlist, key="remove_ticker_local")
+                    if st.button("🗑️ Sil", type="secondary", key="remove_local"):
+                        st.session_state.local_watchlist.remove(ticker_to_remove)
+                        st.success(f"✅ {ticker_to_remove} silindi!")
+                        st.rerun()
+    
+    except Exception as e:
+        st.error(f"❌ İzleme listesi hatası: {str(e)}")
+        st.exception(e)
+
+# Portföy Optimizasyonu Sayfası
+elif page == "💼 Portföy Optimizasyonu":
+    st.header("💼 Portföy Optimizasyonu")
+    st.write("Birden fazla hisse için optimal portföy ağırlıklarını hesaplayın.")
+    
+    try:
+        from src.portfolio_optimization import calculate_optimal_portfolio_weights
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.subheader("📝 Portföy Parametreleri")
+            
+            # Ticker listesi
+            tickers_input = st.text_area(
+                "Hisse Kodları (virgülle ayırın)",
+                value="THYAO, EREGL, TUPRS, GARAN, AKBNK",
+                help="Örnek: THYAO, EREGL, TUPRS"
+            )
+            
+            period = st.selectbox(
+                "Veri Periyodu",
+                ["6mo", "1y", "2y", "3y"],
+                index=1
+            )
+            
+            optimization_method = st.selectbox(
+                "Optimizasyon Yöntemi",
+                ["max_sharpe", "min_volatility"],
+                index=0,
+                help="Maksimum Sharpe Oranı veya Minimum Volatilite"
+            )
+            
+            risk_free_rate = st.slider(
+                "Risksiz Faiz Oranı (%)",
+                min_value=0.0,
+                max_value=10.0,
+                value=2.0,
+                step=0.1
+            ) / 100.0
+            
+            optimize_button = st.button("🚀 Portföy Optimize Et", type="primary")
+        
+        with col2:
+            st.subheader("📊 Optimizasyon Sonuçları")
+            
+            if optimize_button:
+                with st.spinner("Portföy optimizasyonu yapılıyor..."):
+                    try:
+                        # Ticker'ları parse et
+                        tickers = [t.strip().upper() for t in tickers_input.split(',') if t.strip()]
+                        
+                        if len(tickers) < 2:
+                            st.error("❌ En az 2 hisse gerekli!")
+                        else:
+                            # Fiyat verilerini çek
+                            from src.data_collection import get_price_data
+                            
+                            price_data = {}
+                            for ticker in tickers:
+                                try:
+                                    df = get_price_data(ticker, period=period)
+                                    if not df.empty and 'close' in df.columns:
+                                        price_data[ticker] = df['close']
+                                except Exception as e:
+                                    st.warning(f"⚠️ {ticker} için veri çekilemedi: {e}")
+                            
+                            if len(price_data) < 2:
+                                st.error("❌ Yeterli fiyat verisi bulunamadı!")
+                            else:
+                                # DataFrame oluştur
+                                price_df = pd.DataFrame(price_data)
+                                
+                                # Optimizasyon yap
+                                weights = calculate_optimal_portfolio_weights(
+                                    price_df,
+                                    method=optimization_method,
+                                    risk_free_rate=risk_free_rate
+                                )
+                                
+                                # Sonuçları göster
+                                st.success("✅ Optimizasyon tamamlandı!")
+                                
+                                # Ağırlıklar grafiği
+                                weights_df = pd.DataFrame({
+                                    'Hisse': list(weights.keys()),
+                                    'Ağırlık (%)': [w * 100 for w in weights.values()]
+                                }).sort_values('Ağırlık (%)', ascending=False)
+                                
+                                fig = go.Figure(data=[go.Bar(
+                                    x=weights_df['Hisse'],
+                                    y=weights_df['Ağırlık (%)'],
+                                    marker_color='lightblue',
+                                    text=[f"{w:.1f}%" for w in weights_df['Ağırlık (%)']],
+                                    textposition='auto'
+                                )])
+                                
+                                fig.update_layout(
+                                    title='Optimal Portföy Ağırlıkları',
+                                    xaxis_title='Hisse',
+                                    yaxis_title='Ağırlık (%)',
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                                # Pasta grafiği
+                                fig_pie = go.Figure(data=[go.Pie(
+                                    labels=weights_df['Hisse'],
+                                    values=weights_df['Ağırlık (%)'],
+                                    hole=0.3
+                                )])
+                                
+                                fig_pie.update_layout(
+                                    title='Portföy Dağılımı',
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                                
+                                # Tablo
+                                st.subheader("📋 Detaylı Ağırlıklar")
+                                st.dataframe(weights_df, use_container_width=True)
+                    
+                    except Exception as e:
+                        st.error(f"❌ Optimizasyon hatası: {str(e)}")
+                        st.exception(e)
+            else:
+                st.info("👈 Sol taraftan parametreleri ayarlayıp 'Portföy Optimize Et' butonuna tıklayın.")
+    
+    except ImportError:
+        st.error("❌ PyPortfolioOpt yüklü değil. Portföy optimizasyonu kullanılamıyor.")
+        st.info("💡 Yüklemek için: pip install PyPortfolioOpt")
+    except Exception as e:
+        st.error(f"❌ Portföy optimizasyonu hatası: {str(e)}")
+        st.exception(e)
 
 # Model Eğitimi Sayfası
 elif page == "🤖 Model Eğitimi":

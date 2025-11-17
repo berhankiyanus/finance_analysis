@@ -17,8 +17,10 @@ sys.path.insert(0, str(project_root))
 
 from src.prediction_model import PriceDirectionPredictor
 from src.financial_analysis import create_feature_vector
-from src.data_collection import get_price_data
+from src.data_collection import get_price_data, get_news
 from src.financial_analysis import compute_features
+from src.main import analyze_company
+from src.scoring import generate_detailed_report
 
 app = FastAPI(
     title="AI Borsa Analisti API",
@@ -55,6 +57,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "/predict": "POST - Fiyat yönü tahmini",
+            "/report/{hisse_kodu}": "GET - Analist raporu",
             "/health": "GET - API sağlık kontrolü"
         }
     }
@@ -220,6 +223,83 @@ def _rule_based_prediction(ticker: str, feature_vector: Dict, reason: str) -> Pr
         feature_vector=feature_vector,
         message=f"Kural tabanlı tahmin (Model kullanılamadı: {reason})"
     )
+
+
+@app.get("/report/{hisse_kodu}")
+async def get_analyst_report(hisse_kodu: str, company_name: Optional[str] = None):
+    """
+    Belirtilen hisse için detaylı analist raporu döner.
+    
+    Parametreler:
+    ------------
+    hisse_kodu : str
+        Borsa kodu (örn: "THYAO", "AAPL")
+    company_name : str, optional
+        Şirket adı (otomatik bulunamazsa)
+    
+    Döndürür:
+    --------
+    dict
+        Detaylı analist raporu (Gemini AI ile oluşturulmuş)
+    """
+    
+    try:
+        ticker = hisse_kodu.upper()
+        company_name = company_name or ticker
+        
+        # Tam analiz yap
+        results = analyze_company(
+            company_name=company_name,
+            ticker=ticker,
+            days_back=30
+        )
+        
+        # Detaylı rapor varsa döndür
+        if 'detailed_report' in results and results['detailed_report']:
+            detailed_report = results['detailed_report']
+            
+            return {
+                "hisse_kodu": ticker,
+                "company_name": company_name,
+                "report": {
+                    "summary": detailed_report.get('summary', ''),
+                    "gemini_analyst_report": detailed_report.get('gemini_analyst_report', ''),
+                    "hisse_news_summary": detailed_report.get('hisse_news_summary', ''),
+                    "piyasa_news_summary": detailed_report.get('piyasa_news_summary', ''),
+                    "news_analysis": detailed_report.get('news_analysis', []),
+                    "financial_analysis": detailed_report.get('financial_analysis', []),
+                    "recommendation_reasons": detailed_report.get('recommendation_reasons', []),
+                    "key_factors": detailed_report.get('key_factors', [])
+                },
+                "scores": {
+                    "sentiment_score": results.get('sentiment_score', 0),
+                    "financial_score": results.get('financial_score', 0),
+                    "overall_score": results.get('overall_score', 0)
+                },
+                "prediction": results.get('direction_prediction', {})
+            }
+        else:
+            # Basit rapor
+            return {
+                "hisse_kodu": ticker,
+                "company_name": company_name,
+                "report": {
+                    "summary": results.get('summary', 'Rapor oluşturulamadı.'),
+                    "gemini_analyst_report": None
+                },
+                "scores": {
+                    "sentiment_score": results.get('sentiment_score', 0),
+                    "financial_score": results.get('financial_score', 0),
+                    "overall_score": results.get('overall_score', 0)
+                },
+                "prediction": results.get('direction_prediction', {})
+            }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Rapor oluşturulurken hata: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
