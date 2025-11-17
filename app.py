@@ -197,7 +197,7 @@ st.markdown("---")
 st.sidebar.title("🎯 Menü")
 page = st.sidebar.radio(
     "Sayfa Seçin",
-    ["🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
+    ["🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "📊 Sektörel Analiz", "🔥 Trending Hisseler", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
 )
 
 # Ana Sayfa - Analiz
@@ -1129,6 +1129,263 @@ elif page == "💼 Portföy Optimizasyonu":
         st.info("💡 Yüklemek için: pip install PyPortfolioOpt")
     except Exception as e:
         st.error(f"❌ Portföy optimizasyonu hatası: {str(e)}")
+        st.exception(e)
+
+# Sektörel Analiz Sayfası
+elif page == "📊 Sektörel Analiz":
+    st.header("📊 Sektörel Analiz ve Korelasyon")
+    st.write("Hisseler arası korelasyonları ve sektör rotasyonunu analiz edin.")
+    
+    try:
+        from src.sector_analysis import (
+            calculate_correlation,
+            analyze_sector_correlation,
+            calculate_sector_rotation,
+            find_arbitrage_opportunities,
+            BIST_SECTORS,
+            US_SECTORS
+        )
+        
+        tab1, tab2, tab3, tab4 = st.tabs(["🔗 İki Hisse Korelasyonu", "📈 Sektör Korelasyon Matrisi", "🔄 Sektör Rotasyonu", "💰 Arbitraj Fırsatları"])
+        
+        with tab1:
+            st.subheader("🔗 İki Hisse Arası Korelasyon")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                ticker1 = st.text_input("İlk Hisse Kodu", value="THYAO", key="corr_ticker1")
+            with col2:
+                ticker2 = st.text_input("İkinci Hisse Kodu", value="PGSUS", key="corr_ticker2")
+            
+            period = st.selectbox("Veri Periyodu", ["3mo", "6mo", "1y", "2y"], index=2, key="corr_period")
+            method = st.selectbox("Korelasyon Yöntemi", ["pearson", "spearman", "kendall"], index=0, key="corr_method")
+            
+            if st.button("🔍 Korelasyon Hesapla", type="primary"):
+                with st.spinner("Korelasyon hesaplanıyor..."):
+                    result = calculate_correlation(ticker1, ticker2, period=period, method=method)
+                    
+                    if 'error' not in result:
+                        st.success("✅ Korelasyon hesaplandı!")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Korelasyon", f"{result['correlation']:.3f}", help=result['interpretation'])
+                        with col2:
+                            st.metric("P-Value", f"{result['p_value']:.4f}" if result['p_value'] else "N/A")
+                        with col3:
+                            st.metric("Veri Noktası", f"{result['data_points']}")
+                        
+                        st.info(f"📊 **Yorum:** {result['interpretation']}")
+                    else:
+                        st.error(f"❌ Hata: {result['error']}")
+        
+        with tab2:
+            st.subheader("📈 Sektör Korelasyon Matrisi")
+            
+            country = st.selectbox("Ülke", ["TR", "US"], index=0, key="sector_country")
+            sectors = BIST_SECTORS if country == "TR" else US_SECTORS
+            
+            selected_sector = st.selectbox("Sektör Seçin", list(sectors.keys()), key="sector_select")
+            
+            if st.button("📊 Korelasyon Matrisini Hesapla", type="primary"):
+                with st.spinner("Sektör korelasyon matrisi hesaplanıyor..."):
+                    corr_matrix = analyze_sector_correlation(sectors[selected_sector], period="6mo")
+                    
+                    if not corr_matrix.empty:
+                        st.success("✅ Korelasyon matrisi hesaplandı!")
+                        
+                        # Heatmap
+                        import plotly.graph_objects as go
+                        
+                        fig = go.Figure(data=go.Heatmap(
+                            z=corr_matrix.values,
+                            x=corr_matrix.columns,
+                            y=corr_matrix.index,
+                            colorscale='RdYlGn',
+                            zmid=0,
+                            text=corr_matrix.values,
+                            texttemplate='%{text:.2f}',
+                            textfont={"size": 10},
+                            colorbar=dict(title="Korelasyon")
+                        ))
+                        
+                        fig.update_layout(
+                            title=f'{selected_sector} Sektörü Korelasyon Matrisi',
+                            height=500
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tablo
+                        st.subheader("📋 Detaylı Matris")
+                        st.dataframe(corr_matrix, use_container_width=True)
+                    else:
+                        st.error("❌ Korelasyon matrisi hesaplanamadı.")
+        
+        with tab3:
+            st.subheader("🔄 Sektör Rotasyonu")
+            st.write("Hangi sektörler 'ucuz' veya 'pahalı' kaldı?")
+            
+            country = st.selectbox("Ülke", ["TR", "US"], index=0, key="rotation_country")
+            sectors = BIST_SECTORS if country == "TR" else US_SECTORS
+            
+            period = st.selectbox("Analiz Periyodu", ["1mo", "3mo", "6mo", "1y"], index=1, key="rotation_period")
+            
+            if st.button("🔄 Rotasyon Analizi Yap", type="primary"):
+                with st.spinner("Sektör rotasyonu analiz ediliyor..."):
+                    rotation = calculate_sector_rotation(sectors, period=period, country=country)
+                    
+                    if rotation:
+                        st.success("✅ Sektör rotasyonu analizi tamamlandı!")
+                        
+                        # DataFrame oluştur
+                        rotation_df = pd.DataFrame([
+                            {
+                                'Sektör': sector,
+                                'Ortalama Getiri (%)': data['avg_return'],
+                                'Skor (0-100)': data['score'],
+                                'Analiz Edilen Hisse': data['tickers_analyzed']
+                            }
+                            for sector, data in rotation.items()
+                        ]).sort_values('Skor (0-100)', ascending=False)
+                        
+                        # Bar grafiği
+                        fig = go.Figure(data=[go.Bar(
+                            x=rotation_df['Sektör'],
+                            y=rotation_df['Skor (0-100)'],
+                            marker=dict(
+                                color=rotation_df['Skor (0-100)'],
+                                colorscale='RdYlGn',
+                                showscale=True
+                            ),
+                            text=[f"{s:.1f}" for s in rotation_df['Skor (0-100)']],
+                            textposition='auto'
+                        )])
+                        
+                        fig.update_layout(
+                            title='Sektör Performans Skorları',
+                            xaxis_title='Sektör',
+                            yaxis_title='Skor (0-100)',
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tablo
+                        st.subheader("📋 Detaylı Sonuçlar")
+                        st.dataframe(rotation_df, use_container_width=True)
+                    else:
+                        st.error("❌ Sektör rotasyonu analizi yapılamadı.")
+        
+        with tab4:
+            st.subheader("💰 Arbitraj Fırsatları")
+            st.write("İki hisse arasında spread analizi yaparak arbitraj fırsatları bulun.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                arb_ticker1 = st.text_input("İlk Hisse Kodu", value="THYAO", key="arb_ticker1")
+            with col2:
+                arb_ticker2 = st.text_input("İkinci Hisse Kodu", value="PGSUS", key="arb_ticker2")
+            
+            arb_period = st.selectbox("Veri Periyodu", ["3mo", "6mo", "1y"], index=1, key="arb_period")
+            threshold = st.slider("Eşik Değeri", min_value=0.1, max_value=1.0, value=0.3, step=0.1, key="arb_threshold")
+            
+            if st.button("🔍 Arbitraj Analizi Yap", type="primary"):
+                with st.spinner("Arbitraj fırsatları aranıyor..."):
+                    arb_result = find_arbitrage_opportunities(
+                        arb_ticker1, arb_ticker2, period=arb_period, threshold=threshold
+                    )
+                    
+                    if 'error' not in arb_result:
+                        st.success("✅ Arbitraj analizi tamamlandı!")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Mevcut Oran", f"{arb_result['current_ratio']:.3f}")
+                        with col2:
+                            st.metric("Ortalama Oran", f"{arb_result['mean_ratio']:.3f}")
+                        with col3:
+                            st.metric("Z-Score", f"{arb_result['z_score']:.2f}")
+                        
+                        if arb_result['opportunity']:
+                            st.warning(f"⚠️ **Fırsat:** {arb_result['opportunity']}")
+                        else:
+                            st.info("ℹ️ Belirgin bir arbitraj fırsatı bulunamadı.")
+                    else:
+                        st.error(f"❌ Hata: {arb_result['error']}")
+    
+    except ImportError as e:
+        st.error(f"❌ Modül yüklenemedi: {e}")
+        st.info("💡 Gerekli paketlerin yüklü olduğundan emin olun.")
+    except Exception as e:
+        st.error(f"❌ Sektörel analiz hatası: {str(e)}")
+        st.exception(e)
+
+# Trending Hisseler Sayfası
+elif page == "🔥 Trending Hisseler":
+    st.header("🔥 Trending Hisseler (Hype Metre)")
+    st.write("En çok konuşulan ve popüler olan hisseleri keşfedin.")
+    
+    try:
+        from src.alternative_data import find_trending_stocks, calculate_hype_score
+        
+        # İzleme listesinden veya manuel giriş
+        tickers_input = st.text_area(
+            "Analiz Edilecek Hisseler (virgülle ayırın)",
+            value="THYAO, EREGL, TUPRS, GARAN, AKBNK, PGSUS, DOAS",
+            help="Virgülle ayrılmış hisse kodları"
+        )
+        
+        days_back = st.slider("Analiz Periyodu (Gün)", min_value=1, max_value=30, value=7, key="trending_days")
+        
+        if st.button("🔥 Trending Analizi Yap", type="primary"):
+            with st.spinner("Trending hisseler analiz ediliyor..."):
+                tickers = [t.strip().upper() for t in tickers_input.split(',') if t.strip()]
+                
+                if len(tickers) < 1:
+                    st.error("❌ En az 1 hisse gerekli!")
+                else:
+                    trending_df = find_trending_stocks(tickers, days_back=days_back)
+                    
+                    if not trending_df.empty:
+                        st.success("✅ Trending analizi tamamlandı!")
+                        
+                        # Sıralama
+                        trending_df = trending_df.sort_values('hype_score', ascending=False)
+                        
+                        # Bar grafiği
+                        fig = go.Figure(data=[go.Bar(
+                            x=trending_df['ticker'],
+                            y=trending_df['hype_score'],
+                            marker=dict(
+                                color=trending_df['hype_score'],
+                                colorscale='RdYlGn',
+                                showscale=True
+                            ),
+                            text=[f"{s:.1f}" for s in trending_df['hype_score']],
+                            textposition='auto'
+                        )])
+                        
+                        fig.update_layout(
+                            title='Hype Skorları (Popülerlik Ölçer)',
+                            xaxis_title='Hisse',
+                            yaxis_title='Hype Skoru (0-100)',
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tablo
+                        st.subheader("📋 Detaylı Sonuçlar")
+                        st.dataframe(trending_df, use_container_width=True)
+                    else:
+                        st.warning("⚠️ Trending analizi yapılamadı (forum verisi gerekli).")
+                        st.info("💡 Gerçek forum verisi için API entegrasyonu gerekli.")
+    
+    except ImportError as e:
+        st.error(f"❌ Modül yüklenemedi: {e}")
+    except Exception as e:
+        st.error(f"❌ Trending analiz hatası: {str(e)}")
         st.exception(e)
 
 # Model Eğitimi Sayfası
