@@ -228,7 +228,7 @@ class SentimentAnalyzer:
             return None
         
         try:
-            # Gemini'ye gönderilecek prompt (daha detaylı ve finansal odaklı)
+            # Gemini'ye gönderilecek prompt (daha detaylı ve finansal odaklı, daha agresif)
             prompt = f"""Sen bir finansal analiz uzmanısın. Aşağıdaki finansal haber metnini dikkatlice oku ve sentiment (duygu) analizi yap.
 
 HABER METNİ:
@@ -236,11 +236,17 @@ HABER METNİ:
 
 GÖREVİN:
 Bu haberin şirket için finansal açıdan pozitif, negatif veya nötr olduğunu belirle. Haberi bağlamıyla birlikte değerlendir:
-- Pozitif: Kâr artışı, büyüme, başarı, olumlu gelişmeler, fiyat yükselişi, güçlü performans
-- Negatif: Zarar, düşüş, başarısızlık, olumsuz gelişmeler, fiyat düşüşü, zayıf performans
-- Nötr: Bilgilendirici haberler, tarafsız açıklamalar, rutin duyurular
+- Pozitif: Kâr artışı, büyüme, başarı, olumlu gelişmeler, fiyat yükselişi, güçlü performans, yatırım, genişleme, işbirliği, ödül, başarılı sonuçlar
+- Negatif: Zarar, düşüş, başarısızlık, olumsuz gelişmeler, fiyat düşüşü, zayıf performans, kayıp, sorun, dava, kriz, eleştiri
+- Nötr: SADECE gerçekten tarafsız, bilgilendirici haberler (örnek: rutin duyurular, teknik bilgiler, genel piyasa haberleri)
 
-ÖNEMLİ: Haberi gerçekten oku ve anla. Sadece kelime eşleştirmesi yapma. Haberin gerçek anlamını ve finansal etkisini değerlendir.
+KRİTİK KURALLAR:
+1. NÖTR sınıfını MÜMKÜN OLDUĞUNCA AZ KULLAN. Sadece gerçekten hiçbir finansal etkisi olmayan, tamamen tarafsız haberler için nötr kullan.
+2. Eğer haber şirket hakkında herhangi bir pozitif veya negatif bilgi içeriyorsa (kâr, büyüme, zarar, düşüş vb.), MUTLAKA pozitif veya negatif olarak sınıflandır.
+3. Finansal sonuçlar, yatırımlar, iş geliştirmeleri, başarılar, sorunlar, kayıplar gibi konular MUTLAKA pozitif veya negatif olmalı, nötr olmamalı.
+4. Sadece gerçekten hiçbir finansal anlamı olmayan, tamamen bilgilendirici haberler için nötr kullan.
+
+ÖNEMLİ: Haberi gerçekten oku ve anla. Sadece kelime eşleştirmesi yapma. Haberin gerçek anlamını ve finansal etkisini değerlendir. NÖTR sınıfını çok dikkatli kullan.
 
 Yanıtını SADECE şu formatta JSON olarak ver (başka hiçbir açıklama ekleme):
 {{

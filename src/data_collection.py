@@ -11,8 +11,16 @@ from typing import List, Dict, Optional
 import requests
 import time
 import os
+import json
 from dotenv import load_dotenv
 from pathlib import Path
+
+# Gemini API için
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
 
 # .env dosyasından API key'leri yükle
 # Proje kök dizinini bul (.env dosyasının olduğu yer)
@@ -197,6 +205,18 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         news_list = []
         
+        # Gemini API'yi bir kez configure et (eğer mevcut ve kullanılacaksa)
+        gemini_model = None
+        if GEMINI_AVAILABLE:
+            gemini_api_key = os.getenv('GEMINI_API_KEY')
+            if gemini_api_key:
+                try:
+                    genai.configure(api_key=gemini_api_key)
+                    gemini_model = genai.GenerativeModel('gemini-pro')
+                    print("🤖 Gemini API relevance kontrolü için hazır.")
+                except Exception as e:
+                    print(f"⚠️  Gemini API yapılandırılamadı: {e}")
+        
         # Her bir article'ı güvenli şekilde işle
         for article in articles:
             if not article or not isinstance(article, dict):
@@ -250,6 +270,60 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     first_word = company_name.split()[0].lower()
                     if first_word in title_lower or first_word in summary_lower or first_word in content_lower:
                         relevance_score += 0.1
+                
+                # Gemini API ile relevance kontrolü (eğer mevcut ve relevance score düşükse)
+                gemini_relevance_score = None
+                if gemini_model and relevance_score < 0.5:
+                    try:
+                        # Haber metnini hazırla
+                        news_text = f"{title}\n\n{summary}\n\n{content[:500]}"  # İlk 500 karakter
+                        
+                        # Gemini'ye relevance kontrolü için prompt
+                        relevance_prompt = f"""Sen bir finansal analiz uzmanısın. Aşağıdaki haberin "{company_name}" şirketi ile ne kadar alakalı olduğunu değerlendir.
+
+ŞİRKET: {company_name}
+TICKER: {ticker if ticker else 'Belirtilmemiş'}
+
+HABER:
+{news_text}
+
+GÖREVİN:
+Bu haberin "{company_name}" şirketi ile alakalı olup olmadığını belirle. Haber şirket hakkında mı, yoksa sadece genel bir haber mi?
+
+Yanıtını SADECE şu formatta JSON olarak ver:
+{{
+    "is_relevant": true veya false,
+    "relevance_score": 0.0 ile 1.0 arası bir sayı (ne kadar alakalı),
+    "reason": "Kısa açıklama (Türkçe, 1 cümle)"
+}}
+
+SADECE JSON yanıt ver, başka hiçbir şey yazma."""
+                        
+                        response = gemini_model.generate_content(relevance_prompt)
+                        response_text = response.text.strip()
+                        
+                        # JSON'u extract et
+                        if "```json" in response_text:
+                            response_text = response_text.split("```json")[1].split("```")[0].strip()
+                        elif "```" in response_text:
+                            response_text = response_text.split("```")[1].split("```")[0].strip()
+                        
+                        result = json.loads(response_text)
+                        
+                        if result.get('is_relevant', False):
+                            gemini_relevance_score = float(result.get('relevance_score', 0.5))
+                            # Gemini'nin relevance score'unu kullan (daha güvenilir)
+                            relevance_score = max(relevance_score, gemini_relevance_score)
+                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı (score: {gemini_relevance_score:.2f})")
+                        else:
+                            # Gemini alakasız diyorsa, relevance score'u düşür
+                            gemini_relevance_score = float(result.get('relevance_score', 0.0))
+                            relevance_score = min(relevance_score, gemini_relevance_score)
+                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakasız (score: {gemini_relevance_score:.2f})")
+                            
+                    except Exception as e:
+                        # Gemini hatası - normal relevance score'u kullan
+                        pass
                 
                 # Eğer relevance çok düşükse (0.3'ten az), haber alakasız olabilir - atla
                 if relevance_score < 0.3:
