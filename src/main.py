@@ -13,7 +13,13 @@ from datetime import datetime
 try:
     from .data_collection import get_news, get_price_data, get_fundamentals
     from .macro_data import get_macroeconomic_data
-    from .sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
+    from .sentiment_analysis import (
+        SentimentAnalyzer, 
+        analyze_news_sentiment, 
+        aggregate_sentiment,
+        analyze_stock_news,
+        analyze_market_news
+    )
     from .financial_analysis import compute_features, create_feature_vector, compute_financial_score
     from .scoring import (
         compute_overall_score,
@@ -25,7 +31,13 @@ try:
 except ImportError:
     from src.data_collection import get_news, get_price_data, get_fundamentals
     from src.macro_data import get_macroeconomic_data
-    from src.sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
+    from src.sentiment_analysis import (
+        SentimentAnalyzer, 
+        analyze_news_sentiment, 
+        aggregate_sentiment,
+        analyze_stock_news,
+        analyze_market_news
+    )
     from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
     from src.scoring import (
         compute_overall_score,
@@ -106,18 +118,58 @@ def analyze_company(
     print("🤖 2. Sentiment analizi yapılıyor...")
     
     analyzer = SentimentAnalyzer()
-    news_df_with_sentiment = analyze_news_sentiment(news_df, analyzer)
+    news_df_with_sentiment = analyze_news_sentiment(
+        news_df, 
+        analyzer, 
+        company_name=company_name,
+        ticker=ticker,
+        use_context_classification=True
+    )
     
     # Toplam sentiment skoru
     sentiment_score = aggregate_sentiment(news_df_with_sentiment)
     
-    print(f"✅ Sentiment analizi tamamlandı. Skor: {sentiment_score:.2f}/100\n")
+    # Hisse bazlı ve piyasa geneli sentiment skorları (yeni özellik)
+    try:
+        hisse_duygu_skoru = analyze_stock_news(
+            news_df_with_sentiment,
+            analyzer=analyzer,
+            company_name=company_name,
+            ticker=ticker
+        )
+    except Exception as e:
+        print(f"⚠️  Hisse bazlı sentiment analizi hatası: {e}")
+        hisse_duygu_skoru = sentiment_score  # Fallback
+    
+    try:
+        piyasa_duygu_skoru = analyze_market_news(
+            news_df_with_sentiment,
+            analyzer=analyzer
+        )
+    except Exception as e:
+        print(f"⚠️  Piyasa geneli sentiment analizi hatası: {e}")
+        piyasa_duygu_skoru = 50.0  # Fallback (nötr)
+    
+    print(f"✅ Sentiment analizi tamamlandı.")
+    print(f"   • Genel Sentiment Skoru: {sentiment_score:.2f}/100")
+    print(f"   • Hisse Bazlı Duygu Skoru: {hisse_duygu_skoru:.2f}/100")
+    print(f"   • Piyasa Geneli Duygu Skoru: {piyasa_duygu_skoru:.2f}/100\n")
     
     # 3. FİNANSAL ANALİZ
     print("📈 3. Finansal analiz yapılıyor...")
     
-    # Feature'ları hesapla
-    price_df_with_features = compute_features(price_df)
+    # Hisse ve piyasa duygu skorlarını Series'e çevir (feature'lar için)
+    # Her gün için aynı skoru kullan (basit yaklaşım)
+    # İleride zaman serisi olarak geliştirilebilir
+    hisse_duygu_series = pd.Series([hisse_duygu_skoru / 100.0] * len(price_df), index=price_df.index)
+    piyasa_duygu_series = pd.Series([piyasa_duygu_skoru / 100.0] * len(price_df), index=price_df.index)
+    
+    # Feature'ları hesapla (hisse ve piyasa duygu skorları ile)
+    price_df_with_features = compute_features(
+        price_df,
+        hisse_duygu_skoru=hisse_duygu_series,
+        piyasa_duygu_skoru=piyasa_duygu_series
+    )
     
     # Feature vektörü oluştur (fundamentals ve macro_data ile)
     feature_vector = create_feature_vector(price_df_with_features, fundamentals, macro_data)

@@ -791,6 +791,174 @@ def analyze_news_sentiment(
     return news_df_with_sentiment
 
 
+def analyze_stock_news(
+    news_list: List[Dict],
+    analyzer: SentimentAnalyzer = None,
+    company_name: Optional[str] = None,
+    ticker: Optional[str] = None
+) -> float:
+    """
+    Sadece hisse bazlı (KAP, Google Search(THYAO)) haberleri analiz edip hisse_duygu_skoru üretir.
+    
+    Parametreler:
+    ------------
+    news_list : List[Dict]
+        Haber listesi. Her dict 'title', 'summary', 'content' içermeli.
+        Ayrıca 'news_context' veya 'source' kolonu varsa, 'Hisse Bazlı' olanları filtreler.
+    analyzer : SentimentAnalyzer, optional
+        Eğer verilmezse yeni bir tane oluşturulur
+    company_name : str, optional
+        Şirket adı (filtreleme için)
+    ticker : str, optional
+        Borsa kodu (filtreleme için)
+    
+    Döndürür:
+    --------
+    float
+        0-100 arası normalize edilmiş hisse_duygu_skoru
+    """
+    
+    if analyzer is None:
+        analyzer = SentimentAnalyzer()
+    
+    # Haber listesini DataFrame'e çevir
+    if isinstance(news_list, pd.DataFrame):
+        news_df = news_list.copy()
+    else:
+        news_df = pd.DataFrame(news_list)
+    
+    if news_df.empty:
+        return 50.0  # Nötr skor
+    
+    # Hisse bazlı haberleri filtrele
+    stock_news = []
+    
+    for idx, row in news_df.iterrows():
+        # 1. news_context kolonu varsa ve 'Hisse Bazlı' ise
+        if 'news_context' in row and row['news_context'] == 'Hisse Bazlı':
+            stock_news.append(row)
+            continue
+        
+        # 2. source kolonu varsa ve KAP veya şirket adı/ticker içeriyorsa
+        source = str(row.get('source', '')).lower()
+        if 'kap' in source or (company_name and company_name.lower() in source) or (ticker and ticker.lower() in source):
+            stock_news.append(row)
+            continue
+        
+        # 3. Başlık veya içerikte şirket adı/ticker geçiyorsa
+        title = str(row.get('title', '')).lower()
+        summary = str(row.get('summary', '')).lower()
+        content = str(row.get('content', '')).lower()
+        
+        text_combined = f"{title} {summary} {content}"
+        
+        if (company_name and company_name.lower() in text_combined) or \
+           (ticker and ticker.lower() in text_combined):
+            stock_news.append(row)
+            continue
+    
+    if not stock_news:
+        # Eğer hiç hisse bazlı haber yoksa, tüm haberleri kullan (fallback)
+        stock_news = news_df.to_dict('records')
+    
+    # Sentiment analizi yap
+    stock_news_df = pd.DataFrame(stock_news)
+    stock_news_with_sentiment = analyze_news_sentiment(
+        stock_news_df,
+        analyzer=analyzer,
+        company_name=company_name,
+        ticker=ticker,
+        use_context_classification=True
+    )
+    
+    # Toplam skor
+    hisse_duygu_skoru = aggregate_sentiment(stock_news_with_sentiment)
+    
+    print(f"✅ Hisse bazlı haber analizi: {len(stock_news)} haber, Skor: {hisse_duygu_skoru:.2f}/100")
+    
+    return hisse_duygu_skoru
+
+
+def analyze_market_news(
+    news_list: List[Dict],
+    analyzer: SentimentAnalyzer = None
+) -> float:
+    """
+    Sadece genel piyasa (TCMB, faiz, enflasyon, BIST100) haberlerini analiz edip piyasa_duygu_skoru üretir.
+    
+    Parametreler:
+    ------------
+    news_list : List[Dict]
+        Haber listesi. Her dict 'title', 'summary', 'content' içermeli.
+        Ayrıca 'news_context' kolonu varsa, 'Piyasa Geneli' olanları filtreler.
+    analyzer : SentimentAnalyzer, optional
+        Eğer verilmezse yeni bir tane oluşturulur
+    
+    Döndürür:
+    --------
+    float
+        0-100 arası normalize edilmiş piyasa_duygu_skoru
+    """
+    
+    if analyzer is None:
+        analyzer = SentimentAnalyzer()
+    
+    # Haber listesini DataFrame'e çevir
+    if isinstance(news_list, pd.DataFrame):
+        news_df = news_list.copy()
+    else:
+        news_df = pd.DataFrame(news_list)
+    
+    if news_df.empty:
+        return 50.0  # Nötr skor
+    
+    # Piyasa geneli haberleri filtrele
+    market_news = []
+    
+    # Piyasa geneli anahtar kelimeler
+    market_keywords = [
+        'tcmb', 'faiz', 'enflasyon', 'tüfe', 'üfe', 'bist100', 'bist 100',
+        'borsa istanbul', 'piyasa', 'ekonomi', 'politika', 'merkez bankası',
+        'interest rate', 'inflation', 'market', 'economy', 'central bank'
+    ]
+    
+    for idx, row in news_df.iterrows():
+        # 1. news_context kolonu varsa ve 'Piyasa Geneli' ise
+        if 'news_context' in row and row['news_context'] == 'Piyasa Geneli':
+            market_news.append(row)
+            continue
+        
+        # 2. Başlık veya içerikte piyasa geneli anahtar kelimeler geçiyorsa
+        title = str(row.get('title', '')).lower()
+        summary = str(row.get('summary', '')).lower()
+        content = str(row.get('content', '')).lower()
+        
+        text_combined = f"{title} {summary} {content}"
+        
+        if any(keyword in text_combined for keyword in market_keywords):
+            market_news.append(row)
+            continue
+    
+    if not market_news:
+        # Eğer hiç piyasa geneli haber yoksa, tüm haberleri kullan (fallback)
+        market_news = news_df.to_dict('records')
+    
+    # Sentiment analizi yap
+    market_news_df = pd.DataFrame(market_news)
+    market_news_with_sentiment = analyze_news_sentiment(
+        market_news_df,
+        analyzer=analyzer,
+        use_context_classification=True
+    )
+    
+    # Toplam skor
+    piyasa_duygu_skoru = aggregate_sentiment(market_news_with_sentiment)
+    
+    print(f"✅ Piyasa geneli haber analizi: {len(market_news)} haber, Skor: {piyasa_duygu_skoru:.2f}/100")
+    
+    return piyasa_duygu_skoru
+
+
 if __name__ == "__main__":
     # Test
     print("=== Sentiment Analizi Modülü Test ===\n")
@@ -825,4 +993,30 @@ if __name__ == "__main__":
     # Toplam skor
     total_score = aggregate_sentiment(news_with_sentiment)
     print(f"\nToplam Sentiment Skoru: {total_score:.2f}/100")
+    
+    # Hisse bazlı ve piyasa geneli test
+    print("\n\n3. Hisse Bazlı vs Piyasa Geneli Analiz:")
+    test_news_mixed = pd.DataFrame({
+        'title': [
+            'THYAO rekor kâr açıkladı',
+            'TCMB faiz artırımı yaptı',
+            'THYAO yeni uçak siparişi',
+            'BIST100 endeksi yükseldi',
+            'THYAO yolcu sayısı arttı'
+        ],
+        'summary': [
+            'THYAO şirketi beklentileri aştı',
+            'Merkez Bankası politika faizini artırdı',
+            'THYAO yeni uçak siparişi verdi',
+            'BIST100 endeksi güne yükselişle başladı',
+            'THYAO yolcu sayısında artış'
+        ],
+        'published_at': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05'])
+    })
+    
+    hisse_skoru = analyze_stock_news(test_news_mixed, analyzer, company_name="THYAO", ticker="THYAO")
+    piyasa_skoru = analyze_market_news(test_news_mixed, analyzer)
+    
+    print(f"\nHisse Bazlı Duygu Skoru: {hisse_skoru:.2f}/100")
+    print(f"Piyasa Geneli Duygu Skoru: {piyasa_skoru:.2f}/100")
 
