@@ -108,9 +108,32 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             search_terms.append(company_name_english)
             # Örnek: "Koç Holding" -> "Koc Holding" ve "Koc"
             if ' ' in company_name_english:
-                first_word = company_name_english.split()[0]
+                words = company_name_english.split()
+                first_word = words[0]
                 if first_word not in search_terms:
                     search_terms.append(first_word)
+                # İkinci kelimeyi de ekle (örn: "Holding")
+                if len(words) > 1:
+                    second_word = words[1]
+                    if second_word not in search_terms:
+                        search_terms.append(second_word)
+        
+        # Özel şirket adları için alternatif isimler ekle
+        company_aliases = {
+            'Koç Holding': ['Koc Holding', 'Koc Group', 'Koc', 'Koc Holding A.S.', 'Koc Holding AS', 'Koc Holding Inc'],
+            'Sabancı': ['Sabanci', 'Sabanci Holding', 'Sabanci Group'],
+            'Türk Hava Yolları': ['Turk Hava Yollari', 'Turkish Airlines', 'THY', 'THYAO'],
+            'Türk Telekom': ['Turk Telekom', 'Turk Telekomunikasyon', 'TTKOM'],
+            'Ereğli Demir Çelik': ['Eregli Demir Celik', 'Eregli', 'EREGL'],
+            'Tüpraş': ['Tupras', 'Turkiye Petrol Rafinerileri', 'TUPRS']
+        }
+        
+        # Şirket adı için alias'ları ekle
+        for original, aliases in company_aliases.items():
+            if original.lower() in company_name.lower() or company_name.lower() in original.lower():
+                for alias in aliases:
+                    if alias not in search_terms:
+                        search_terms.append(alias)
         
         # Ticker sembolü varsa arama terimlerine ekle
         if ticker:
@@ -118,6 +141,19 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             # Ticker'ın küçük harfli versiyonunu da ekle
             if ticker.isupper():
                 search_terms.append(ticker.lower())
+        
+        # Türk şirketleri için özel arama terimleri
+        # "Koç Holding" + "KCHOL" kombinasyonları
+        if ticker and company_name:
+            # Şirket adı + ticker kombinasyonları
+            search_terms.append(f"{company_name} {ticker}")
+            if company_name_english != company_name:
+                search_terms.append(f"{company_name_english} {ticker}")
+        
+        # Duplicate'leri temizle (sırayı koruyarak)
+        search_terms = list(dict.fromkeys(search_terms))
+        
+        print(f"🔍 Toplam {len(search_terms)} arama terimi hazırlandı: {search_terms[:10]}...")  # İlk 10'unu göster
         
         # Eğer şirket adı büyük harflerle yazılmışsa (ticker sembolü olabilir), küçük harfe çevir
         if company_name.isupper() and len(company_name) <= 5:
