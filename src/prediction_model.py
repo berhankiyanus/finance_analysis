@@ -545,14 +545,32 @@ class PriceDirectionPredictor:
                     # Multi-class için en yüksek sınıfın SHAP değerlerini al
                     if isinstance(shap_values, list):
                         # En yüksek olasılıklı sınıfı bul
-                        prediction = self.model.predict(X_scaled)[0]
+                        prediction_raw = self.model.predict(X_scaled)[0]
+                        # Numpy array'i scalar'a çevir
+                        if isinstance(prediction_raw, np.ndarray):
+                            prediction = int(prediction_raw.item())
+                        else:
+                            prediction = int(prediction_raw)
                         class_idx = list(self.model.classes_).index(prediction)
                         shap_values = shap_values[class_idx]
                     
-                    shap_values = shap_values[0]  # İlk örnek
+                    # İlk örneği al - array ise ilk elemanı, zaten scalar ise direkt kullan
+                    if isinstance(shap_values, np.ndarray):
+                        if len(shap_values.shape) > 1:
+                            shap_values = shap_values[0]
+                        else:
+                            shap_values = shap_values
+                    else:
+                        shap_values = shap_values
                 else:
                     # Regression için direkt kullan
-                    shap_values = shap_values[0] if len(shap_values.shape) > 1 else shap_values
+                    if isinstance(shap_values, np.ndarray):
+                        if len(shap_values.shape) > 1:
+                            shap_values = shap_values[0]
+                        else:
+                            shap_values = shap_values
+                    else:
+                        shap_values = shap_values
             else:
                 # Diğer modeller için KernelExplainer
                 if self.task_type == "classification":
@@ -570,7 +588,12 @@ class PriceDirectionPredictor:
                 if self.task_type == "classification":
                     # En yüksek olasılıklı sınıf için SHAP değerleri
                     if isinstance(shap_values, list):
-                        prediction = self.model.predict(X_scaled)[0]
+                        prediction_raw = self.model.predict(X_scaled)[0]
+                        # Numpy array'i scalar'a çevir
+                        if isinstance(prediction_raw, np.ndarray):
+                            prediction = int(prediction_raw.item())
+                        else:
+                            prediction = int(prediction_raw)
                         class_idx = list(self.model.classes_).index(prediction)
                         shap_values = shap_values[class_idx]
         except Exception as e:
@@ -580,9 +603,32 @@ class PriceDirectionPredictor:
             shap_values = importances * (X_scaled[0] - background.mean(axis=0))
         
         # Feature isimleri ile eşleştir
+        # shap_values'ı numpy array'den Python list'e çevir
+        if isinstance(shap_values, np.ndarray):
+            if shap_values.size == 1:
+                # Tek bir değer varsa, feature sayısı kadar tekrarla (fallback)
+                shap_values_list = [float(shap_values.item())] * len(self.feature_names)
+            else:
+                shap_values_list = shap_values.tolist() if shap_values.ndim > 0 else [float(shap_values.item())]
+        elif isinstance(shap_values, (list, tuple)):
+            shap_values_list = list(shap_values)
+        else:
+            # Scalar değer - tüm feature'lar için aynı değeri kullan (fallback)
+            shap_values_list = [float(shap_values)] * len(self.feature_names)
+        
+        # Eğer liste uzunluğu feature sayısından farklıysa, düzelt
+        if len(shap_values_list) != len(self.feature_names):
+            if len(shap_values_list) == 1:
+                shap_values_list = shap_values_list * len(self.feature_names)
+            elif len(shap_values_list) > len(self.feature_names):
+                shap_values_list = shap_values_list[:len(self.feature_names)]
+            else:
+                # Eksik feature'lar için 0 ekle
+                shap_values_list.extend([0.0] * (len(self.feature_names) - len(shap_values_list)))
+        
         shap_dict = {
             name: float(value)
-            for name, value in zip(self.feature_names, shap_values)
+            for name, value in zip(self.feature_names, shap_values_list)
         }
         
         # En önemli feature'ları sırala
