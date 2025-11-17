@@ -122,11 +122,13 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             for keyword in financial_keywords[:3]:
                 search_terms.append(f"{ticker} {keyword}")
         
-        # NewsAPI'den haber çek - farklı stratejiler dene
+        # NewsAPI'den haber çek - TÜM arama terimlerini dene (daha fazla haber bulmak için)
         articles = []
+        seen_urls = set()  # Duplicate haberleri önlemek için
         total_results = 0
         
-        # Strateji 1: Dil parametresi olmadan geniş arama
+        # Strateji 1: Dil parametresi olmadan geniş arama - TÜM terimleri dene
+        print(f"🔍 {len(search_terms)} arama terimi ile geniş arama yapılıyor...")
         for search_term in search_terms:
             params = {
                 'q': search_term,
@@ -159,15 +161,22 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                         print(f"⚠️  NewsAPI hatası: {error_msg} (Kod: {error_code})")
                         continue  # Bir sonraki arama terimini dene
                 
-                # Sonuçları topla
+                # Sonuçları topla (duplicate kontrolü ile)
                 found_articles = data.get('articles', [])
                 found_total = data.get('totalResults', 0)
                 
                 if found_articles:
-                    articles.extend(found_articles)
+                    # Duplicate kontrolü yap
+                    new_articles = []
+                    for article in found_articles:
+                        article_url = article.get('url', '').strip()
+                        if article_url and article_url not in seen_urls:
+                            seen_urls.add(article_url)
+                            new_articles.append(article)
+                    
+                    articles.extend(new_articles)
                     total_results = max(total_results, found_total)
-                    print(f"✅ '{search_term}' için {len(found_articles)} haber bulundu")
-                    break  # Haber bulundu, diğer aramalara gerek yok
+                    print(f"✅ '{search_term}' için {len(new_articles)} yeni haber bulundu (toplam: {len(articles)})")
                 else:
                     print(f"⚠️  '{search_term}' için 0 haber bulundu")
                     
@@ -175,11 +184,10 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 print(f"⚠️  '{search_term}' araması sırasında hata: {e}")
                 continue  # Bir sonraki arama terimini dene
         
-        # Strateji 2: Eğer hala haber bulunamadıysa, language parametresi ile dene
-        if not articles:
-            print(f"🔄 Alternatif arama stratejisi deneniyor...")
-            for search_term in search_terms:
-                # Önce İngilizce haberler
+        # Strateji 2: Eğer hala yeterli haber yoksa, language parametresi ile dene
+        if len(articles) < 20:  # Eğer 20'den az haber varsa, İngilizce arama da yap
+            print(f"🔄 İngilizce haberler için ek arama yapılıyor...")
+            for search_term in search_terms[:5]:  # İlk 5 terim için
                 params = {
                     'q': search_term,
                     'from': start_date.strftime('%Y-%m-%d'),
@@ -198,16 +206,24 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     if data.get('status') == 'ok':
                         found_articles = data.get('articles', [])
                         if found_articles:
-                            articles.extend(found_articles)
+                            # Duplicate kontrolü
+                            new_articles = []
+                            for article in found_articles:
+                                article_url = article.get('url', '').strip()
+                                if article_url and article_url not in seen_urls:
+                                    seen_urls.add(article_url)
+                                    new_articles.append(article)
+                            
+                            articles.extend(new_articles)
                             total_results = max(total_results, data.get('totalResults', 0))
-                            print(f"✅ '{search_term}' için {len(found_articles)} İngilizce haber bulundu")
-                            break
+                            print(f"✅ '{search_term}' için {len(new_articles)} yeni İngilizce haber bulundu (toplam: {len(articles)})")
                 except:
                     continue
         
-        print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} haber döndürüldü")
+        print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} benzersiz haber toplandı")
         print(f"   📅 Tarih aralığı: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}")
-        print(f"   🔍 Arama terimi: '{company_name}'")
+        print(f"   🔍 Arama terimleri: {len(search_terms)} farklı terim kullanıldı")
+        print(f"   🤖 Gemini API ile alakalı haberler filtreleniyor...")
         
         if not articles:
             if total_results == 0:
@@ -289,7 +305,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     if first_word in title_lower or first_word in summary_lower or first_word in content_lower:
                         relevance_score += 0.1
                 
-                # Gemini API ile relevance ve finansal etki kontrolü (tüm haberler için)
+                # Gemini API ile relevance ve finansal etki kontrolü (TÜM haberler için)
+                # Bu sayede sadece alakalı ve finansal etkisi olan haberler seçilir
                 gemini_relevance_score = None
                 financial_impact_score = None
                 if gemini_model:
@@ -367,13 +384,20 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                         # Gemini hatası - normal relevance score'u kullan
                         pass
                 
-                # Eğer relevance çok düşükse (0.4'ten az) veya finansal etkisi yoksa, haber alakasız olabilir - atla
-                if relevance_score < 0.4:
-                    continue  # Alakasız haberi atla
-                
-                # Finansal etkisi olmayan haberleri de filtrele (eğer Gemini kontrolü yapılmadıysa)
-                if financial_impact_score is not None and financial_impact_score < 0.3:
-                    continue  # Finansal etkisi olmayan haberi atla
+                # Eğer Gemini kontrolü yapıldıysa, onun skorlarını kullan
+                # Eğer yapılmadıysa, basit relevance score'u kullan
+                if gemini_relevance_score is not None:
+                    # Gemini kontrolü yapıldı - onun skorlarını kullan
+                    # Eğer finansal etkisi yoksa veya çok düşükse, atla
+                    if financial_impact_score is not None and financial_impact_score < 0.25:
+                        continue  # Finansal etkisi çok düşük, atla
+                    # Relevance threshold'u biraz düşür (daha fazla haber geçsin)
+                    if relevance_score < 0.35:
+                        continue  # Alakasız haberi atla
+                else:
+                    # Gemini kontrolü yapılmadı - basit relevance score kullan
+                    if relevance_score < 0.4:
+                        continue  # Alakasız haberi atla
                 
                 news_list.append({
                     'title': title,
