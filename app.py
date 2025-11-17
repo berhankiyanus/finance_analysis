@@ -55,6 +55,41 @@ else:
     # API key'i environment'a set et
     os.environ['NEWS_API_KEY'] = NEWS_API_KEY
 
+# Gemini API Key'i yükle
+GEMINI_API_KEY = None
+
+# 1. Streamlit Cloud secrets'tan dene (web ortamı için)
+try:
+    if hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
+        GEMINI_API_KEY = st.secrets['GEMINI_API_KEY']
+        os.environ['GEMINI_API_KEY'] = GEMINI_API_KEY
+        st.sidebar.success("✅ Gemini API Key Streamlit secrets'tan yüklendi")
+except:
+    pass
+
+# 2. .env dosyasından dene (local için)
+if GEMINI_API_KEY is None:
+    if env_path.exists():
+        GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+        if GEMINI_API_KEY:
+            st.sidebar.success("✅ Gemini API Key .env dosyasından yüklendi")
+        else:
+            st.sidebar.info("ℹ️ Gemini API Key bulunamadı (opsiyonel - FinBERT kullanılacak)")
+
+# 3. Environment variable'dan dene (genel)
+if GEMINI_API_KEY is None:
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    if GEMINI_API_KEY:
+        st.sidebar.info("ℹ️ Gemini API Key environment variable'dan yüklendi")
+
+# Son kontrol
+if GEMINI_API_KEY:
+    # API key'i environment'a set et
+    os.environ['GEMINI_API_KEY'] = GEMINI_API_KEY
+else:
+    st.sidebar.info("ℹ️ Gemini API Key bulunamadı. Sadece FinBERT modeli kullanılacak.")
+    st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
+
 from src.main import analyze_company
 from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
 from src.data_collection import get_price_data, get_fundamentals

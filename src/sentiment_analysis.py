@@ -6,11 +6,21 @@ Bu modül, haber metinlerine sentiment analizi uygular.
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import warnings
+import os
+import json
 warnings.filterwarnings('ignore')
+
+# Gemini API için
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    print("⚠️  google-generativeai paketi yüklü değil. Gemini API kullanılamayacak.")
 
 
 class SentimentAnalyzer:
@@ -18,7 +28,7 @@ class SentimentAnalyzer:
     Haber metinleri için sentiment analizi yapan sınıf.
     """
     
-    def __init__(self, model_name: str = "ProsusAI/finbert"):
+    def __init__(self, model_name: str = "ProsusAI/finbert", use_gemini: bool = True):
         """
         Sentiment analiz modelini yükler.
         
@@ -26,9 +36,12 @@ class SentimentAnalyzer:
         ------------
         model_name : str
             Hugging Face model adı
+        use_gemini : bool
+            Gemini API kullanılsın mı? (varsayılan: True)
         """
         print(f"📥 Sentiment modeli yükleniyor: {model_name}...")
         
+        # FinBERT modelini yükle
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
@@ -38,13 +51,34 @@ class SentimentAnalyzer:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.model.to(self.device)
             
-            print(f"✅ Model yüklendi. Cihaz: {self.device}")
+            print(f"✅ FinBERT modeli yüklendi. Cihaz: {self.device}")
             
         except Exception as e:
-            print(f"⚠️  Model yüklenemedi: {e}")
+            print(f"⚠️  FinBERT modeli yüklenemedi: {e}")
             print("⚠️  Basit kural tabanlı sentiment kullanılacak.")
             self.model = None
             self.tokenizer = None
+        
+        # Gemini API'yi yükle
+        self.use_gemini = use_gemini and GEMINI_AVAILABLE
+        self.gemini_model = None
+        
+        if self.use_gemini:
+            try:
+                # Gemini API key'ini al
+                gemini_api_key = os.getenv('GEMINI_API_KEY')
+                if gemini_api_key:
+                    genai.configure(api_key=gemini_api_key)
+                    # Gemini Pro modelini kullan
+                    self.gemini_model = genai.GenerativeModel('gemini-pro')
+                    print("✅ Gemini API yüklendi ve yapılandırıldı.")
+                else:
+                    print("⚠️  GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")
+                    print("   💡 Gemini API key'i almak için: https://makersuite.google.com/app/apikey")
+                    self.use_gemini = False
+            except Exception as e:
+                print(f"⚠️  Gemini API yüklenemedi: {e}")
+                self.use_gemini = False
     
     def analyze_sentiment(self, text: str) -> Dict:
         """
@@ -70,18 +104,20 @@ class SentimentAnalyzer:
                 'probs': {'positive': 0.33, 'negative': 0.33, 'neutral': 0.34}
             }
         
-        # Model varsa kullan (FinBERT - metni anlayarak analiz yapar)
+        # 1. Önce Gemini API'ye sor (daha iyi context anlama için)
+        if self.use_gemini and self.gemini_model is not None:
+            gemini_result = self._analyze_with_gemini(text)
+            if gemini_result:
+                # Gemini başarılı, sonucu kullan
+                return gemini_result
+            # Gemini başarısız olursa FinBERT'e geç
+        
+        # 2. Gemini yoksa veya başarısız olduysa FinBERT kullan
         if self.model is not None:
-            result = self._analyze_with_model(text)
-            # Debug: Model kullanıldığını göster (sadece ilk birkaç çağrıda)
-            if not hasattr(self, '_debug_count'):
-                self._debug_count = 0
-            if self._debug_count < 3:
-                print(f"🔍 FinBERT modeli kullanıldı: '{text[:50]}...' -> {result['class']} (confidence: {result['confidence']:.2f})")
-                self._debug_count += 1
-            return result
+            finbert_result = self._analyze_with_model(text)
+            return finbert_result
         else:
-            # Model yüklenemedi, kural tabanlı sentiment (fallback)
+            # FinBERT de yoksa kural tabanlı sentiment (fallback)
             print("⚠️  FinBERT modeli yüklenemedi, kural tabanlı analiz kullanılıyor.")
             return self._analyze_with_rules(text)
     
@@ -173,6 +209,118 @@ class SentimentAnalyzer:
         except Exception as e:
             print(f"⚠️  Model analizi hatası: {e}")
             return self._analyze_with_rules(text)
+    
+    def _analyze_with_gemini(self, text: str) -> Optional[Dict]:
+        """
+        Gemini API ile sentiment analizi yapar.
+        
+        Parametreler:
+        ------------
+        text : str
+            Analiz edilecek metin
+        
+        Döndürür:
+        --------
+        dict veya None
+            Sentiment sonucu veya hata durumunda None
+        """
+        if not self.gemini_model:
+            return None
+        
+        try:
+            # Gemini'ye gönderilecek prompt (daha detaylı ve finansal odaklı)
+            prompt = f"""Sen bir finansal analiz uzmanısın. Aşağıdaki finansal haber metnini dikkatlice oku ve sentiment (duygu) analizi yap.
+
+HABER METNİ:
+{text}
+
+GÖREVİN:
+Bu haberin şirket için finansal açıdan pozitif, negatif veya nötr olduğunu belirle. Haberi bağlamıyla birlikte değerlendir:
+- Pozitif: Kâr artışı, büyüme, başarı, olumlu gelişmeler, fiyat yükselişi, güçlü performans
+- Negatif: Zarar, düşüş, başarısızlık, olumsuz gelişmeler, fiyat düşüşü, zayıf performans
+- Nötr: Bilgilendirici haberler, tarafsız açıklamalar, rutin duyurular
+
+ÖNEMLİ: Haberi gerçekten oku ve anla. Sadece kelime eşleştirmesi yapma. Haberin gerçek anlamını ve finansal etkisini değerlendir.
+
+Yanıtını SADECE şu formatta JSON olarak ver (başka hiçbir açıklama ekleme):
+{{
+    "class": "positive" veya "negative" veya "neutral",
+    "confidence": 0.0 ile 1.0 arası bir sayı (ne kadar emin olduğun),
+    "probs": {{
+        "positive": 0.0 ile 1.0 arası (pozitif olma olasılığı),
+        "negative": 0.0 ile 1.0 arası (negatif olma olasılığı),
+        "neutral": 0.0 ile 1.0 arası (nötr olma olasılığı)
+    }},
+    "reason": "Kısa açıklama - neden bu sentiment? (Türkçe, 1-2 cümle)"
+}}
+
+SADECE JSON yanıt ver, başka hiçbir şey yazma."""
+
+            # Gemini'ye gönder
+            response = self.gemini_model.generate_content(prompt)
+            
+            # Yanıtı parse et
+            response_text = response.text.strip()
+            
+            # JSON'u extract et (eğer markdown code block içindeyse)
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+            
+            # JSON parse et
+            try:
+                result = json.loads(response_text)
+                
+                # Sonucu normalize et
+                class_name = result.get('class', 'neutral').lower()
+                if class_name not in ['positive', 'negative', 'neutral']:
+                    class_name = 'neutral'
+                
+                confidence = float(result.get('confidence', 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+                
+                probs = result.get('probs', {})
+                pos_prob = float(probs.get('positive', 0.33))
+                neg_prob = float(probs.get('negative', 0.33))
+                neu_prob = float(probs.get('neutral', 0.34))
+                
+                # Normalize et (toplam 1.0 olmalı)
+                total = pos_prob + neg_prob + neu_prob
+                if total > 0:
+                    pos_prob /= total
+                    neg_prob /= total
+                    neu_prob /= total
+                else:
+                    pos_prob = neg_prob = neu_prob = 0.33
+                
+                # Debug: İlk birkaç çağrıda göster
+                if not hasattr(self, '_gemini_debug_count'):
+                    self._gemini_debug_count = 0
+                if self._gemini_debug_count < 3:
+                    reason = result.get('reason', 'Belirtilmemiş')
+                    print(f"🤖 Gemini API kullanıldı: '{text[:50]}...' -> {class_name} (confidence: {confidence:.2f})")
+                    print(f"   💭 Neden: {reason}")
+                    self._gemini_debug_count += 1
+                
+                return {
+                    'class': class_name,
+                    'confidence': confidence,
+                    'probs': {
+                        'positive': pos_prob,
+                        'negative': neg_prob,
+                        'neutral': neu_prob
+                    }
+                }
+                
+            except json.JSONDecodeError as e:
+                print(f"⚠️  Gemini API yanıtı parse edilemedi: {e}")
+                print(f"   Yanıt: {response_text[:200]}")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️  Gemini API hatası: {e}")
+            return None
     
     def _analyze_with_rules(self, text: str) -> Dict:
         """
