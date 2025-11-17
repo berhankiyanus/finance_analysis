@@ -187,7 +187,16 @@ def analyze_sector_correlation(
         try:
             from .data_collection import get_price_data
         except ImportError:
-            from src.data_collection import get_price_data
+            try:
+                from src.data_collection import get_price_data
+            except ImportError:
+                # Streamlit Cloud için alternatif import
+                import sys
+                from pathlib import Path
+                project_root = Path(__file__).parent.parent
+                if str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
+                from src.data_collection import get_price_data
         
         # Tüm hisselerin fiyat verilerini çek
         price_data = {}
@@ -418,7 +427,16 @@ def find_arbitrage_opportunities(
         try:
             from .data_collection import get_price_data
         except ImportError:
-            from src.data_collection import get_price_data
+            try:
+                from src.data_collection import get_price_data
+            except ImportError:
+                # Streamlit Cloud için alternatif import
+                import sys
+                from pathlib import Path
+                project_root = Path(__file__).parent.parent
+                if str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
+                from src.data_collection import get_price_data
         
         # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
         ticker1_formatted = ticker1 if '.IS' in ticker1 or ticker1.endswith('.IS') else (ticker1 + '.IS' if len(ticker1) == 5 and ticker1.isalpha() else ticker1)
