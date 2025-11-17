@@ -51,11 +51,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
     
-    - name: Deploy to Streamlit Cloud
-      uses: streamlit/streamlit-cloud-action@v1
-      with:
-        streamlit_token: ${{ secrets.STREAMLIT_TOKEN }}
-        app_path: app.py
+    - name: Streamlit Cloud Deployment Info
+      run: |
+        echo "✅ Testler başarılı! Streamlit Cloud otomatik deployment için hazır."
+        echo "📝 Not: Streamlit Cloud, GitHub repository'nizi otomatik olarak algılar."
+        echo "💡 Streamlit Cloud dashboard'dan manuel olarak deploy edebilirsiniz:"
+        echo "   https://share.streamlit.io/"
+        echo ""
+        echo "🔗 Repository: ${{ github.repository }}"
+        echo "📁 App Path: app.py"
+        echo "🌿 Branch: ${{ github.ref_name }}"
+    
+    # Not: Streamlit Cloud artık GitHub Actions ile direkt deploy desteklemiyor
+    # Streamlit Cloud dashboard'dan manuel olarak deploy edilmesi gerekiyor
+    # veya Streamlit Cloud'un otomatik deployment özelliği kullanılabilir
 
   # Otomatik Model Yeniden Eğitimi (Haftalık - Pazar gecesi)
   retrain_models:
