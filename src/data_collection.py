@@ -607,7 +607,7 @@ def _get_dummy_price_data(ticker: str) -> pd.DataFrame:
 
 def get_fundamentals(ticker: str) -> Optional[Dict]:
     """
-    Şirket için temel finansal göstergeleri çeker (opsiyonel).
+    Şirket için kapsamlı finansal göstergeleri çeker.
     
     Parametreler:
     ------------
@@ -617,36 +617,140 @@ def get_fundamentals(ticker: str) -> Optional[Dict]:
     Döndürür:
     --------
     dict veya None
-        Finansal göstergeler (P/E, gelir büyümesi, kâr marjı vb.)
+        Finansal göstergeler (P/E, gelir büyümesi, kâr marjı, bilanço, gelir tablosu vb.)
     """
     
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # İlgili göstergeleri çıkar
+        # Temel finansal oranlar
         fundamentals = {
+            # Fiyat Oranları
             'pe_ratio': info.get('trailingPE', None),
+            'forward_pe': info.get('forwardPE', None),
+            'peg_ratio': info.get('pegRatio', None),
+            'price_to_book': info.get('priceToBook', None),
+            'price_to_sales': info.get('priceToSalesTrailing12Months', None),
+            'ev_to_revenue': info.get('enterpriseToRevenue', None),
+            'ev_to_ebitda': info.get('enterpriseToEbitda', None),
+            
+            # Piyasa Değeri
             'market_cap': info.get('marketCap', None),
+            'enterprise_value': info.get('enterpriseValue', None),
+            'shares_outstanding': info.get('sharesOutstanding', None),
+            'float_shares': info.get('floatShares', None),
+            
+            # Büyüme Oranları
             'revenue_growth': info.get('revenueGrowth', None),
+            'earnings_growth': info.get('earningsQuarterlyGrowth', None),
+            'earnings_yearly_growth': info.get('earningsGrowth', None),
+            'revenue_per_share': info.get('revenuePerShare', None),
+            
+            # Kârlılık Oranları
             'profit_margin': info.get('profitMargins', None),
+            'gross_margin': info.get('grossMargins', None),
+            'operating_margin': info.get('operatingMargins', None),
+            'ebitda_margin': info.get('ebitdaMargins', None),
+            'roe': info.get('returnOnEquity', None),
+            'roa': info.get('returnOnAssets', None),
+            'roic': info.get('returnOnInvestedCapital', None),
+            
+            # Finansal Sağlık
             'debt_to_equity': info.get('debtToEquity', None),
+            'debt_to_assets': info.get('debtToAssets', None),
             'current_ratio': info.get('currentRatio', None),
-            'roe': info.get('returnOnEquity', None)
+            'quick_ratio': info.get('quickRatio', None),
+            'cash_per_share': info.get('totalCashPerShare', None),
+            'book_value': info.get('bookValue', None),
+            
+            # Likidite
+            'total_cash': info.get('totalCash', None),
+            'total_debt': info.get('totalDebt', None),
+            'total_revenue': info.get('totalRevenue', None),
+            'free_cashflow': info.get('freeCashflow', None),
+            
+            # Temettü
+            'dividend_yield': info.get('dividendYield', None),
+            'payout_ratio': info.get('payoutRatio', None),
+            'dividend_rate': info.get('dividendRate', None),
+            
+            # Diğer
+            'beta': info.get('beta', None),
+            '52_week_high': info.get('fiftyTwoWeekHigh', None),
+            '52_week_low': info.get('fiftyTwoWeekLow', None),
+            'target_price': info.get('targetMeanPrice', None),
         }
         
-        # None değerleri filtrele
-        fundamentals = {k: v for k, v in fundamentals.items() if v is not None}
+        # Finansal tabloları çek (bilanço, gelir tablosu, nakit akış)
+        try:
+            # Bilanço (Balance Sheet)
+            balance_sheet = stock.balance_sheet
+            if not balance_sheet.empty:
+                # Son dönem bilanço verileri
+                latest_bs = balance_sheet.iloc[:, 0] if len(balance_sheet.columns) > 0 else pd.Series()
+                fundamentals['balance_sheet'] = {
+                    'total_assets': latest_bs.get('Total Assets', None),
+                    'total_liabilities': latest_bs.get('Total Liab', None),
+                    'total_equity': latest_bs.get('Stockholders Equity', None),
+                    'cash_and_equivalents': latest_bs.get('Cash And Cash Equivalents', None),
+                    'total_debt_bs': latest_bs.get('Total Debt', None),
+                }
+            
+            # Gelir Tablosu (Income Statement)
+            income_stmt = stock.financials
+            if not income_stmt.empty:
+                latest_is = income_stmt.iloc[:, 0] if len(income_stmt.columns) > 0 else pd.Series()
+                fundamentals['income_statement'] = {
+                    'total_revenue': latest_is.get('Total Revenue', None),
+                    'gross_profit': latest_is.get('Gross Profit', None),
+                    'operating_income': latest_is.get('Operating Income', None),
+                    'net_income': latest_is.get('Net Income', None),
+                    'ebitda': latest_is.get('EBITDA', None),
+                    'eps': latest_is.get('Diluted EPS', None),
+                }
+            
+            # Nakit Akış Tablosu (Cash Flow)
+            cashflow = stock.cashflow
+            if not cashflow.empty:
+                latest_cf = cashflow.iloc[:, 0] if len(cashflow.columns) > 0 else pd.Series()
+                fundamentals['cash_flow'] = {
+                    'operating_cashflow': latest_cf.get('Total Cash From Operating Activities', None),
+                    'investing_cashflow': latest_cf.get('Total Cashflows From Investing Activities', None),
+                    'financing_cashflow': latest_cf.get('Total Cash From Financing Activities', None),
+                    'free_cashflow_cf': latest_cf.get('Free Cash Flow', None),
+                }
+        except Exception as e:
+            print(f"⚠️  Finansal tablolar çekilirken hata: {e}")
         
-        if fundamentals:
-            print(f"✅ {len(fundamentals)} finansal gösterge bulundu.")
-            return fundamentals
+        # None değerleri filtrele (sadece temel göstergeler için)
+        basic_fundamentals = {k: v for k, v in fundamentals.items() if k not in ['balance_sheet', 'income_statement', 'cash_flow'] and v is not None}
+        
+        # Finansal tabloları ekle (None olsa bile)
+        if 'balance_sheet' in fundamentals:
+            basic_fundamentals['balance_sheet'] = fundamentals['balance_sheet']
+        if 'income_statement' in fundamentals:
+            basic_fundamentals['income_statement'] = fundamentals['income_statement']
+        if 'cash_flow' in fundamentals:
+            basic_fundamentals['cash_flow'] = fundamentals['cash_flow']
+        
+        if basic_fundamentals:
+            print(f"✅ {len([k for k in basic_fundamentals.keys() if k not in ['balance_sheet', 'income_statement', 'cash_flow']])} finansal gösterge bulundu.")
+            if 'balance_sheet' in basic_fundamentals:
+                print(f"   📊 Bilanço verisi eklendi")
+            if 'income_statement' in basic_fundamentals:
+                print(f"   💰 Gelir tablosu verisi eklendi")
+            if 'cash_flow' in basic_fundamentals:
+                print(f"   💵 Nakit akış tablosu verisi eklendi")
+            return basic_fundamentals
         else:
             print("⚠️  Finansal gösterge bulunamadı.")
             return None
             
     except Exception as e:
         print(f"⚠️  Finansal gösterge çekilirken hata: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

@@ -353,6 +353,109 @@ class PriceDirectionPredictor:
         
         return importance_df
     
+    def explain_prediction_shap(
+        self,
+        feature_vector: Dict,
+        background_data: Optional[np.ndarray] = None,
+        max_evals: int = 100
+    ) -> Dict:
+        """
+        SHAP kullanarak tahmin açıklaması yapar.
+        
+        Parametreler:
+        ------------
+        feature_vector : dict
+            Feature vektörü
+        background_data : np.ndarray, optional
+            Background veri (SHAP için referans). Eğer yoksa, feature_vector'dan oluşturulur.
+        max_evals : int
+            Maksimum SHAP değerlendirme sayısı (varsayılan: 100)
+        
+        Döndürür:
+        --------
+        dict
+            SHAP değerleri ve açıklamalar
+        """
+        
+        if not self.is_trained:
+            raise ValueError("Model henüz eğitilmedi.")
+        
+        try:
+            import shap
+        except ImportError:
+            raise ImportError("SHAP yüklü değil. 'pip install shap' komutu ile yükleyin.")
+        
+        # Feature vektörünü array'e çevir
+        X = np.array([[feature_vector.get(name, 0) for name in self.feature_names]])
+        X_scaled = self.scaler.transform(X)
+        
+        # Background data hazırla
+        if background_data is None:
+            # Basit background: feature_vector'ın etrafında küçük varyasyonlar
+            background_size = min(50, max_evals)
+            background = np.random.normal(
+                loc=X_scaled[0],
+                scale=0.1,
+                size=(background_size, len(self.feature_names))
+            )
+        else:
+            background = background_data
+        
+        # SHAP explainer oluştur
+        try:
+            # Tree-based modeller için TreeExplainer
+            if self.model_type in ['random_forest', 'xgboost', 'gradient_boosting']:
+                explainer = shap.TreeExplainer(self.model)
+                shap_values = explainer.shap_values(X_scaled)
+                
+                # Multi-class için en yüksek sınıfın SHAP değerlerini al
+                if isinstance(shap_values, list):
+                    # En yüksek olasılıklı sınıfı bul
+                    prediction = self.model.predict(X_scaled)[0]
+                    class_idx = list(self.model.classes_).index(prediction)
+                    shap_values = shap_values[class_idx]
+                
+                shap_values = shap_values[0]  # İlk örnek
+            else:
+                # Diğer modeller için KernelExplainer
+                explainer = shap.KernelExplainer(
+                    self.model.predict_proba,
+                    background,
+                    max_evals=max_evals
+                )
+                shap_values = explainer.shap_values(X_scaled[0])
+                
+                # En yüksek olasılıklı sınıf için SHAP değerleri
+                if isinstance(shap_values, list):
+                    prediction = self.model.predict(X_scaled)[0]
+                    class_idx = list(self.model.classes_).index(prediction)
+                    shap_values = shap_values[class_idx]
+        except Exception as e:
+            print(f"⚠️  SHAP hesaplama hatası: {e}")
+            # Fallback: Feature importance kullan
+            importances = self.model.feature_importances_ if hasattr(self.model, 'feature_importances_') else np.ones(len(self.feature_names))
+            shap_values = importances * (X_scaled[0] - background.mean(axis=0))
+        
+        # Feature isimleri ile eşleştir
+        shap_dict = {
+            name: float(value)
+            for name, value in zip(self.feature_names, shap_values)
+        }
+        
+        # En önemli feature'ları sırala
+        sorted_features = sorted(shap_dict.items(), key=lambda x: abs(x[1]), reverse=True)
+        
+        # Tahmin bilgisi
+        prediction = self.predict(feature_vector)
+        
+        return {
+            'shap_values': shap_dict,
+            'top_features': sorted_features[:10],  # En önemli 10 feature
+            'prediction': prediction,
+            'feature_names': self.feature_names,
+            'feature_values': {name: feature_vector.get(name, 0) for name in self.feature_names}
+        }
+    
     def save_model(self, filepath: str):
         """
         Modeli kaydeder.

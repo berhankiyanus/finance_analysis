@@ -103,6 +103,284 @@ def calculate_bollinger_bands(prices: pd.Series, period: int = 20, std_mult: flo
     }
 
 
+def calculate_stochastic(high: pd.Series, low: pd.Series, close: pd.Series, k_period: int = 14, d_period: int = 3) -> Dict[str, pd.Series]:
+    """
+    Stochastic Oscillator hesaplar.
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    k_period : int
+        %K periyodu (varsayılan: 14)
+    d_period : int
+        %D periyodu (varsayılan: 3)
+    
+    Döndürür:
+    --------
+    dict
+        'stoch_k', 'stoch_d' serileri (0-100 arası)
+    """
+    lowest_low = low.rolling(k_period).min()
+    highest_high = high.rolling(k_period).max()
+    
+    stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low))
+    stoch_d = stoch_k.rolling(d_period).mean()
+    
+    return {
+        'stoch_k': stoch_k,
+        'stoch_d': stoch_d
+    }
+
+
+def calculate_williams_r(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Williams %R hesaplar.
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 14)
+    
+    Döndürür:
+    --------
+    pd.Series
+        Williams %R değerleri (-100 ile 0 arası)
+    """
+    highest_high = high.rolling(period).max()
+    lowest_low = low.rolling(period).min()
+    
+    williams_r = -100 * ((highest_high - close) / (highest_high - lowest_low))
+    
+    return williams_r
+
+
+def calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Average True Range (ATR) hesaplar.
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 14)
+    
+    Döndürür:
+    --------
+    pd.Series
+        ATR değerleri
+    """
+    high_low = high - low
+    high_close = np.abs(high - close.shift())
+    low_close = np.abs(low - close.shift())
+    
+    true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = true_range.rolling(period).mean()
+    
+    return atr
+
+
+def calculate_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Average Directional Index (ADX) hesaplar (basitleştirilmiş).
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 14)
+    
+    Döndürür:
+    --------
+    pd.Series
+        ADX değerleri (0-100 arası)
+    """
+    # True Range
+    atr = calculate_atr(high, low, close, period)
+    
+    # Directional Movement
+    plus_dm = high.diff()
+    minus_dm = -low.diff()
+    
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm < 0] = 0
+    
+    plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
+    minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
+    
+    # ADX
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
+    adx = dx.rolling(period).mean()
+    
+    return adx
+
+
+def calculate_obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """
+    On Balance Volume (OBV) hesaplar.
+    
+    Parametreler:
+    ------------
+    close : pd.Series
+        Kapanış fiyatları
+    volume : pd.Series
+        Hacim
+    
+    Döndürür:
+    --------
+    pd.Series
+        OBV değerleri
+    """
+    obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
+    return obv
+
+
+def calculate_mfi(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Money Flow Index (MFI) hesaplar.
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    volume : pd.Series
+        Hacim
+    period : int
+        Periyot (varsayılan: 14)
+    
+    Döndürür:
+    --------
+    pd.Series
+        MFI değerleri (0-100 arası)
+    """
+    typical_price = (high + low + close) / 3
+    money_flow = typical_price * volume
+    
+    positive_flow = money_flow.where(typical_price > typical_price.shift(), 0).rolling(period).sum()
+    negative_flow = money_flow.where(typical_price < typical_price.shift(), 0).rolling(period).sum()
+    
+    mfi = 100 - (100 / (1 + positive_flow / negative_flow))
+    
+    return mfi
+
+
+def calculate_cci(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 20) -> pd.Series:
+    """
+    Commodity Channel Index (CCI) hesaplar.
+    
+    Parametreler:
+    ------------
+    high, low, close : pd.Series
+        Yüksek, düşük, kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 20)
+    
+    Döndürür:
+    --------
+    pd.Series
+        CCI değerleri
+    """
+    typical_price = (high + low + close) / 3
+    sma = typical_price.rolling(period).mean()
+    mad = typical_price.rolling(period).apply(lambda x: np.abs(x - x.mean()).mean())
+    
+    cci = (typical_price - sma) / (0.015 * mad)
+    
+    return cci
+
+
+def calculate_momentum(close: pd.Series, period: int = 10) -> pd.Series:
+    """
+    Momentum hesaplar.
+    
+    Parametreler:
+    ------------
+    close : pd.Series
+        Kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 10)
+    
+    Döndürür:
+    --------
+    pd.Series
+        Momentum değerleri
+    """
+    return close.diff(period)
+
+
+def calculate_roc(close: pd.Series, period: int = 10) -> pd.Series:
+    """
+    Rate of Change (ROC) hesaplar.
+    
+    Parametreler:
+    ------------
+    close : pd.Series
+        Kapanış fiyatları
+    period : int
+        Periyot (varsayılan: 10)
+    
+    Döndürür:
+    --------
+    pd.Series
+        ROC değerleri (yüzde)
+    """
+    return close.pct_change(period) * 100
+
+
+def detect_candlestick_patterns(open: pd.Series, high: pd.Series, low: pd.Series, close: pd.Series) -> pd.DataFrame:
+    """
+    Basit candlestick pattern'leri tespit eder.
+    
+    Parametreler:
+    ------------
+    open, high, low, close : pd.Series
+        Açılış, yüksek, düşük, kapanış fiyatları
+    
+    Döndürür:
+    --------
+    pd.DataFrame
+        Pattern tespit sonuçları (0 veya 1)
+    """
+    patterns = pd.DataFrame(index=close.index)
+    
+    # Body ve shadow hesapla
+    body = np.abs(close - open)
+    upper_shadow = high - np.maximum(close, open)
+    lower_shadow = np.minimum(close, open) - low
+    total_range = high - low
+    
+    # Doji (çok küçük body)
+    patterns['doji'] = ((body / total_range) < 0.1).astype(int)
+    
+    # Hammer (küçük body, uzun lower shadow)
+    patterns['hammer'] = ((body / total_range < 0.3) & 
+                          (lower_shadow > 2 * body) & 
+                          (upper_shadow < body)).astype(int)
+    
+    # Shooting Star (küçük body, uzun upper shadow)
+    patterns['shooting_star'] = ((body / total_range < 0.3) & 
+                                 (upper_shadow > 2 * body) & 
+                                 (lower_shadow < body)).astype(int)
+    
+    # Engulfing (önceki mumu tamamen kaplayan)
+    prev_body = body.shift(1)
+    patterns['bullish_engulfing'] = ((close > open) & 
+                                      (close.shift(1) < open.shift(1)) &
+                                      (close > open.shift(1)) & 
+                                      (open < close.shift(1))).astype(int)
+    
+    patterns['bearish_engulfing'] = ((close < open) & 
+                                      (close.shift(1) > open.shift(1)) &
+                                      (close < open.shift(1)) & 
+                                      (open > close.shift(1))).astype(int)
+    
+    return patterns
+
+
 def compute_features(price_df: pd.DataFrame) -> pd.DataFrame:
     """
     Fiyat verisinden feature'lar üretir.
@@ -162,17 +440,114 @@ def compute_features(price_df: pd.DataFrame) -> pd.DataFrame:
     df['volume_ma_20'] = df['volume'].rolling(20).mean()
     df['volume_ratio'] = df['volume'] / df['volume_ma_20']
     
+    # === GELİŞMİŞ TEKNİK GÖSTERGELER ===
+    
+    # Stochastic Oscillator
+    stoch = calculate_stochastic(df['high'], df['low'], df['close'])
+    df['stoch_k'] = stoch['stoch_k']
+    df['stoch_d'] = stoch['stoch_d']
+    
+    # Williams %R
+    df['williams_r'] = calculate_williams_r(df['high'], df['low'], df['close'])
+    
+    # ATR (Average True Range)
+    df['atr'] = calculate_atr(df['high'], df['low'], df['close'])
+    df['atr_percent'] = (df['atr'] / df['close']) * 100  # Yüzde olarak
+    
+    # ADX (Average Directional Index)
+    df['adx'] = calculate_adx(df['high'], df['low'], df['close'])
+    
+    # OBV (On Balance Volume)
+    df['obv'] = calculate_obv(df['close'], df['volume'])
+    df['obv_ma'] = df['obv'].rolling(20).mean()
+    df['obv_trend'] = (df['obv'] > df['obv_ma']).astype(int)  # 1 = yükseliş, 0 = düşüş
+    
+    # Money Flow Index (MFI)
+    df['mfi'] = calculate_mfi(df['high'], df['low'], df['close'], df['volume'])
+    
+    # Commodity Channel Index (CCI)
+    df['cci'] = calculate_cci(df['high'], df['low'], df['close'])
+    
+    # Momentum
+    df['momentum_10'] = calculate_momentum(df['close'], period=10)
+    df['momentum_20'] = calculate_momentum(df['close'], period=20)
+    
+    # Rate of Change (ROC)
+    df['roc_10'] = calculate_roc(df['close'], period=10)
+    df['roc_20'] = calculate_roc(df['close'], period=20)
+    
+    # === CANDLESTICK PATTERNS ===
+    if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+        patterns = detect_candlestick_patterns(df['open'], df['high'], df['low'], df['close'])
+        for pattern_name in patterns.columns:
+            df[f'pattern_{pattern_name}'] = patterns[pattern_name]
+    
+    # === FİYAT POZİSYON FEATURES ===
+    # Fiyatın günlük aralıktaki konumu (0-1 arası, 0 = düşük, 1 = yüksek)
+    df['price_position'] = (df['close'] - df['low']) / (df['high'] - df['low'])
+    df['price_position'] = df['price_position'].replace([np.inf, -np.inf], 0.5).fillna(0.5)
+    
+    # Fiyatın Bollinger Bands içindeki konumu
+    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
+        bb_range = df['bb_upper'] - df['bb_lower']
+        df['bb_position'] = (df['close'] - df['bb_lower']) / bb_range
+        df['bb_position'] = df['bb_position'].replace([np.inf, -np.inf], 0.5).fillna(0.5)
+    
+    # === ZAMAN TABANLI FEATURES ===
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+        df['day_of_week'] = df['date'].dt.dayofweek  # 0 = Pazartesi, 6 = Pazar
+        df['month'] = df['date'].dt.month
+        df['is_month_end'] = (df['date'].dt.is_month_end).astype(int)
+        df['is_quarter_end'] = (df['date'].dt.is_quarter_end).astype(int)
+    elif df.index.dtype == 'datetime64[ns]':
+        df['day_of_week'] = df.index.dayofweek
+        df['month'] = df.index.month
+        df['is_month_end'] = (df.index.is_month_end).astype(int)
+        df['is_quarter_end'] = (df.index.is_quarter_end).astype(int)
+    
+    # === VOLATİLİTE ÖLÇÜMLERİ ===
+    # Realized Volatility (daha hassas)
+    df['realized_vol_10d'] = np.sqrt(252) * df['daily_return'].rolling(10).std() * 100
+    df['realized_vol_30d'] = np.sqrt(252) * df['daily_return'].rolling(30).std() * 100
+    
+    # Parkinson Volatility (high-low kullanarak)
+    df['parkinson_vol'] = np.sqrt(252 / (4 * np.log(2))) * np.sqrt(np.log(df['high'] / df['low'])**2).rolling(20).mean() * 100
+    
+    # === HACİM-BAZLI FEATURES ===
+    # Volume Price Trend (VPT)
+    df['vpt'] = (df['volume'] * df['daily_return']).cumsum()
+    df['vpt_ma'] = df['vpt'].rolling(20).mean()
+    df['vpt_trend'] = (df['vpt'] > df['vpt_ma']).astype(int)
+    
+    # Volume Weighted Average Price (VWAP) - günlük
+    df['vwap'] = (df['close'] * df['volume']).rolling(20).sum() / df['volume'].rolling(20).sum()
+    df['price_vs_vwap'] = (df['close'] / df['vwap'] - 1) * 100
+    
+    # === MOMENTUM FEATURES ===
+    # Price Acceleration (momentum'un değişimi)
+    df['price_acceleration'] = df['momentum_10'].diff()
+    
+    # === TREND STRENGTH ===
+    # ADX ile trend gücü (zaten hesaplandı)
+    # RSI trend (RSI'nın kendisi trend gücünü gösterir)
+    
+    # === MEAN REVERSION FEATURES ===
+    # Fiyatın ortalamadan sapması (z-score)
+    df['price_zscore_20'] = (df['close'] - df['ma_20']) / df['close'].rolling(20).std()
+    df['price_zscore_50'] = (df['close'] - df['ma_50']) / df['close'].rolling(50).std()
+    
     return df
 
 
 def normalize_financial_metrics(fundamentals: Dict) -> Dict:
     """
-    Finansal göstergeleri 0-100 arası skora çevirir.
+    Finansal göstergeleri 0-100 arası skora çevirir (genişletilmiş versiyon).
     
     Parametreler:
     ------------
     fundamentals : dict
-        Finansal göstergeler (P/E, gelir büyümesi, kâr marjı vb.)
+        Finansal göstergeler (P/E, gelir büyümesi, kâr marjı, bilanço, gelir tablosu vb.)
     
     Döndürür:
     --------
@@ -183,34 +558,111 @@ def normalize_financial_metrics(fundamentals: Dict) -> Dict:
     
     scores = {}
     
-    # P/E oranı: Düşük P/E genelde iyi (tersine çevir)
+    # === FİYAT ORANLARI ===
+    # P/E oranı: Düşük P/E genelde iyi
     if 'pe_ratio' in fundamentals and fundamentals['pe_ratio'] is not None:
         pe = fundamentals['pe_ratio']
         if pe > 0:
-            # P/E 0-50 arası normal kabul edilir
             pe_score = max(0, min(100, (50 - pe) / 50 * 100))
             scores['pe_score'] = pe_score
     
+    # Forward P/E
+    if 'forward_pe' in fundamentals and fundamentals['forward_pe'] is not None:
+        fpe = fundamentals['forward_pe']
+        if fpe > 0:
+            fpe_score = max(0, min(100, (50 - fpe) / 50 * 100))
+            scores['forward_pe_score'] = fpe_score
+    
+    # PEG Ratio (P/E Growth): 1 civarı ideal
+    if 'peg_ratio' in fundamentals and fundamentals['peg_ratio'] is not None:
+        peg = fundamentals['peg_ratio']
+        if peg > 0:
+            # 1'e yakın = yüksek skor
+            peg_score = max(0, min(100, 100 - abs(peg - 1) * 50))
+            scores['peg_score'] = peg_score
+    
+    # Price to Book: Düşük iyi
+    if 'price_to_book' in fundamentals and fundamentals['price_to_book'] is not None:
+        pb = fundamentals['price_to_book']
+        if pb > 0:
+            pb_score = max(0, min(100, (5 - pb) / 5 * 100))
+            scores['pb_score'] = pb_score
+    
+    # Price to Sales: Düşük iyi
+    if 'price_to_sales' in fundamentals and fundamentals['price_to_sales'] is not None:
+        ps = fundamentals['price_to_sales']
+        if ps > 0:
+            ps_score = max(0, min(100, (10 - ps) / 10 * 100))
+            scores['ps_score'] = ps_score
+    
+    # === BÜYÜME ORANLARI ===
     # Gelir büyümesi: Yüksek büyüme iyi
     if 'revenue_growth' in fundamentals and fundamentals['revenue_growth'] is not None:
-        growth = fundamentals['revenue_growth'] * 100  # Yüzdeye çevir
-        # %0-50 arası büyüme normal
+        growth = fundamentals['revenue_growth'] * 100
         growth_score = max(0, min(100, growth / 50 * 100))
         scores['growth_score'] = growth_score
     
+    # Kâr büyümesi
+    if 'earnings_yearly_growth' in fundamentals and fundamentals['earnings_yearly_growth'] is not None:
+        earn_growth = fundamentals['earnings_yearly_growth'] * 100
+        earn_growth_score = max(0, min(100, earn_growth / 50 * 100))
+        scores['earnings_growth_score'] = earn_growth_score
+    
+    # === KÂRLILIK ORANLARI ===
     # Kâr marjı: Yüksek marj iyi
     if 'profit_margin' in fundamentals and fundamentals['profit_margin'] is not None:
-        margin = fundamentals['profit_margin'] * 100  # Yüzdeye çevir
-        # %0-30 arası marj normal
+        margin = fundamentals['profit_margin'] * 100
         margin_score = max(0, min(100, margin / 30 * 100))
         scores['margin_score'] = margin_score
     
+    # Gross Margin
+    if 'gross_margin' in fundamentals and fundamentals['gross_margin'] is not None:
+        gross_margin = fundamentals['gross_margin'] * 100
+        gross_score = max(0, min(100, gross_margin / 50 * 100))
+        scores['gross_margin_score'] = gross_score
+    
+    # Operating Margin
+    if 'operating_margin' in fundamentals and fundamentals['operating_margin'] is not None:
+        op_margin = fundamentals['operating_margin'] * 100
+        op_score = max(0, min(100, op_margin / 30 * 100))
+        scores['operating_margin_score'] = op_score
+    
+    # EBITDA Margin
+    if 'ebitda_margin' in fundamentals and fundamentals['ebitda_margin'] is not None:
+        ebitda_margin = fundamentals['ebitda_margin'] * 100
+        ebitda_score = max(0, min(100, ebitda_margin / 30 * 100))
+        scores['ebitda_margin_score'] = ebitda_score
+    
+    # ROE (Özsermaye kârlılığı): Yüksek iyi
+    if 'roe' in fundamentals and fundamentals['roe'] is not None:
+        roe = fundamentals['roe'] * 100
+        roe_score = max(0, min(100, roe / 30 * 100))
+        scores['roe_score'] = roe_score
+    
+    # ROA (Varlık kârlılığı)
+    if 'roa' in fundamentals and fundamentals['roa'] is not None:
+        roa = fundamentals['roa'] * 100
+        roa_score = max(0, min(100, roa / 20 * 100))
+        scores['roa_score'] = roa_score
+    
+    # ROIC (Yatırılan sermaye kârlılığı)
+    if 'roic' in fundamentals and fundamentals['roic'] is not None:
+        roic = fundamentals['roic'] * 100
+        roic_score = max(0, min(100, roic / 20 * 100))
+        scores['roic_score'] = roic_score
+    
+    # === FİNANSAL SAĞLIK ===
     # Borç/Özsermaye: Düşük oran iyi
     if 'debt_to_equity' in fundamentals and fundamentals['debt_to_equity'] is not None:
         de_ratio = fundamentals['debt_to_equity']
-        # 0-2 arası normal
         de_score = max(0, min(100, (2 - de_ratio) / 2 * 100))
         scores['de_score'] = de_score
+    
+    # Debt to Assets
+    if 'debt_to_assets' in fundamentals and fundamentals['debt_to_assets'] is not None:
+        da_ratio = fundamentals['debt_to_assets']
+        da_score = max(0, min(100, (0.5 - da_ratio) / 0.5 * 100))
+        scores['debt_to_assets_score'] = da_score
     
     # Cari oran: 1-3 arası ideal
     if 'current_ratio' in fundamentals and fundamentals['current_ratio'] is not None:
@@ -218,21 +670,92 @@ def normalize_financial_metrics(fundamentals: Dict) -> Dict:
         if 1 <= cr <= 3:
             cr_score = 100
         elif cr < 1:
-            cr_score = cr * 100  # 1'in altı kötü
+            cr_score = cr * 100
         else:
-            cr_score = max(0, 100 - (cr - 3) * 20)  # 3'ün üstü de kötü
+            cr_score = max(0, 100 - (cr - 3) * 20)
         scores['current_ratio_score'] = cr_score
     
-    # ROE (Özsermaye kârlılığı): Yüksek iyi
-    if 'roe' in fundamentals and fundamentals['roe'] is not None:
-        roe = fundamentals['roe'] * 100  # Yüzdeye çevir
-        # %0-30 arası normal
-        roe_score = max(0, min(100, roe / 30 * 100))
-        scores['roe_score'] = roe_score
+    # Quick Ratio
+    if 'quick_ratio' in fundamentals and fundamentals['quick_ratio'] is not None:
+        qr = fundamentals['quick_ratio']
+        if 0.5 <= qr <= 2:
+            qr_score = max(0, min(100, (qr - 0.5) / 1.5 * 100))
+        else:
+            qr_score = max(0, 100 - abs(qr - 1.25) * 40)
+        scores['quick_ratio_score'] = qr_score
     
-    # Tüm skorların ortalaması
+    # === LİKİDİTE ===
+    # Free Cash Flow pozitifse iyi
+    if 'free_cashflow' in fundamentals and fundamentals['free_cashflow'] is not None:
+        fcf = fundamentals['free_cashflow']
+        if fcf > 0:
+            # Büyük FCF = yüksek skor (logaritmik ölçek)
+            import math
+            fcf_score = min(100, max(0, 50 + math.log10(abs(fcf) / 1e6) * 10))
+            scores['fcf_score'] = fcf_score
+    
+    # Cash per Share
+    if 'cash_per_share' in fundamentals and fundamentals['cash_per_share'] is not None:
+        cps = fundamentals['cash_per_share']
+        if cps > 0:
+            cps_score = min(100, max(0, cps / 10 * 100))
+            scores['cash_per_share_score'] = cps_score
+    
+    # === TEMETTÜ ===
+    # Dividend Yield: Orta seviye iyi (çok yüksek riskli olabilir)
+    if 'dividend_yield' in fundamentals and fundamentals['dividend_yield'] is not None:
+        div_yield = fundamentals['dividend_yield'] * 100
+        # %2-5 arası ideal
+        if 2 <= div_yield <= 5:
+            div_score = 100
+        else:
+            div_score = max(0, 100 - abs(div_yield - 3.5) * 20)
+        scores['dividend_yield_score'] = div_score
+    
+    # === BİLANÇO VE GELİR TABLOSU ===
+    # Bilanço analizi
+    if 'balance_sheet' in fundamentals and fundamentals['balance_sheet']:
+        bs = fundamentals['balance_sheet']
+        # Özsermaye / Toplam Varlıklar oranı
+        if bs.get('total_equity') and bs.get('total_assets'):
+            if bs['total_assets'] > 0:
+                equity_ratio = bs['total_equity'] / bs['total_assets']
+                equity_ratio_score = max(0, min(100, equity_ratio * 200))  # %50 = 100 skor
+                scores['equity_ratio_score'] = equity_ratio_score
+    
+    # Gelir tablosu analizi
+    if 'income_statement' in fundamentals and fundamentals['income_statement']:
+        is_stmt = fundamentals['income_statement']
+        # Net Income pozitifse iyi
+        if is_stmt.get('net_income'):
+            if is_stmt['net_income'] > 0:
+                ni_score = min(100, max(0, 50 + math.log10(abs(is_stmt['net_income']) / 1e6) * 10))
+                scores['net_income_score'] = ni_score
+    
+    # Nakit akış analizi
+    if 'cash_flow' in fundamentals and fundamentals['cash_flow']:
+        cf = fundamentals['cash_flow']
+        # Operating Cash Flow pozitifse iyi
+        if cf.get('operating_cashflow'):
+            if cf['operating_cashflow'] > 0:
+                ocf_score = min(100, max(0, 50 + math.log10(abs(cf['operating_cashflow']) / 1e6) * 10))
+                scores['operating_cf_score'] = ocf_score
+    
+    # Tüm skorların ağırlıklı ortalaması
     if scores:
-        overall_score = sum(scores.values()) / len(scores)
+        # Önemli göstergelere daha fazla ağırlık ver
+        weights = {
+            'pe_score': 1.5, 'forward_pe_score': 1.2, 'peg_score': 1.3,
+            'growth_score': 1.5, 'earnings_growth_score': 1.3,
+            'margin_score': 1.4, 'roe_score': 1.5, 'roa_score': 1.2, 'roic_score': 1.3,
+            'de_score': 1.2, 'current_ratio_score': 1.1,
+            'fcf_score': 1.3, 'operating_cf_score': 1.2,
+        }
+        
+        weighted_sum = sum(scores.get(k, 0) * weights.get(k, 1.0) for k in scores.keys())
+        total_weight = sum(weights.get(k, 1.0) for k in scores.keys())
+        
+        overall_score = weighted_sum / total_weight if total_weight > 0 else sum(scores.values()) / len(scores)
     else:
         overall_score = 50.0  # Nötr skor
     
@@ -242,9 +765,9 @@ def normalize_financial_metrics(fundamentals: Dict) -> Dict:
     }
 
 
-def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] = None) -> Dict:
+def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] = None, macro_data: Optional[Dict] = None) -> Dict:
     """
-    Tüm feature'ları birleştirerek tek bir vektör oluşturur.
+    Tüm feature'ları birleştirerek tek bir vektör oluşturur (genişletilmiş versiyon).
     
     Parametreler:
     ------------
@@ -252,6 +775,8 @@ def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] =
         Feature'ları hesaplanmış fiyat DataFrame'i
     fundamentals : dict, optional
         Temel finansal göstergeler
+    macro_data : dict, optional
+        Makroekonomik veriler
     
     Döndürür:
     --------
@@ -274,20 +799,67 @@ def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] =
         # Volatilite
         'volatility_10d': latest.get('volatility_10d', 0) * 100,
         'volatility_30d': latest.get('volatility_30d', 0) * 100,
+        'realized_vol_10d': latest.get('realized_vol_10d', 0),
+        'realized_vol_30d': latest.get('realized_vol_30d', 0),
+        'parkinson_vol': latest.get('parkinson_vol', 0),
         
         # Hareketli ortalamalar (fiyatın MA'lara göre konumu)
         'price_vs_ma10': latest.get('price_vs_ma10', 0),
         'price_vs_ma20': latest.get('price_vs_ma20', 0),
         'price_vs_ma50': latest.get('price_vs_ma50', 0),
+        'price_vs_vwap': latest.get('price_vs_vwap', 0),
         
         # Teknik göstergeler
         'rsi_14': latest.get('rsi_14', 50),
         'macd': latest.get('macd', 0),
         'macd_histogram': latest.get('macd_histogram', 0),
         
+        # Gelişmiş teknik göstergeler
+        'stoch_k': latest.get('stoch_k', 50),
+        'stoch_d': latest.get('stoch_d', 50),
+        'williams_r': latest.get('williams_r', -50),
+        'atr_percent': latest.get('atr_percent', 0),
+        'adx': latest.get('adx', 25),
+        'mfi': latest.get('mfi', 50),
+        'cci': latest.get('cci', 0),
+        'momentum_10': latest.get('momentum_10', 0),
+        'momentum_20': latest.get('momentum_20', 0),
+        'roc_10': latest.get('roc_10', 0),
+        'roc_20': latest.get('roc_20', 0),
+        
         # Hacim
         'volume_ratio': latest.get('volume_ratio', 1.0),
+        'obv_trend': latest.get('obv_trend', 0),
+        'vpt_trend': latest.get('vpt_trend', 0),
+        
+        # Fiyat pozisyon
+        'price_position': latest.get('price_position', 0.5),
+        'bb_position': latest.get('bb_position', 0.5),
+        
+        # Mean reversion
+        'price_zscore_20': latest.get('price_zscore_20', 0),
+        'price_zscore_50': latest.get('price_zscore_50', 0),
+        
+        # Momentum
+        'price_acceleration': latest.get('price_acceleration', 0),
+        
+        # Candlestick patterns
+        'pattern_doji': latest.get('pattern_doji', 0),
+        'pattern_hammer': latest.get('pattern_hammer', 0),
+        'pattern_shooting_star': latest.get('pattern_shooting_star', 0),
+        'pattern_bullish_engulfing': latest.get('pattern_bullish_engulfing', 0),
+        'pattern_bearish_engulfing': latest.get('pattern_bearish_engulfing', 0),
     }
+    
+    # Zaman tabanlı features (eğer varsa)
+    if 'day_of_week' in price_df.columns:
+        features['day_of_week'] = latest.get('day_of_week', 0)
+    if 'month' in price_df.columns:
+        features['month'] = latest.get('month', 6)
+    if 'is_month_end' in price_df.columns:
+        features['is_month_end'] = latest.get('is_month_end', 0)
+    if 'is_quarter_end' in price_df.columns:
+        features['is_quarter_end'] = latest.get('is_quarter_end', 0)
     
     # Finansal göstergeler varsa ekle
     if fundamentals:
@@ -296,6 +868,36 @@ def create_feature_vector(price_df: pd.DataFrame, fundamentals: Optional[Dict] =
         # Bireysel skorları da ekle
         for key, value in fin_scores['individual_scores'].items():
             features[key] = value
+        
+        # Önemli finansal oranları direkt ekle (normalize edilmiş)
+        if 'pe_ratio' in fundamentals and fundamentals['pe_ratio']:
+            features['pe_ratio'] = fundamentals['pe_ratio']
+        if 'revenue_growth' in fundamentals and fundamentals['revenue_growth']:
+            features['revenue_growth'] = fundamentals['revenue_growth'] * 100
+        if 'profit_margin' in fundamentals and fundamentals['profit_margin']:
+            features['profit_margin'] = fundamentals['profit_margin'] * 100
+        if 'roe' in fundamentals and fundamentals['roe']:
+            features['roe'] = fundamentals['roe'] * 100
+        if 'debt_to_equity' in fundamentals and fundamentals['debt_to_equity']:
+            features['debt_to_equity'] = fundamentals['debt_to_equity']
+    
+    # Makroekonomik veriler varsa ekle
+    if macro_data:
+        # Risk-free rate (10Y Treasury)
+        if 'treasury_10y' in macro_data:
+            features['risk_free_rate'] = macro_data['treasury_10y']
+        
+        # VIX (Volatilite endeksi)
+        if 'vix' in macro_data:
+            features['vix'] = macro_data['vix']
+        
+        # Dolar endeksi
+        if 'dollar_index' in macro_data:
+            features['dollar_index'] = macro_data['dollar_index']
+        
+        # USD/TRY (Türkiye için)
+        if 'usd_try' in macro_data:
+            features['usd_try'] = macro_data['usd_try']
     
     return features
 

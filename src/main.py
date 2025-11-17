@@ -12,6 +12,7 @@ from datetime import datetime
 
 try:
     from .data_collection import get_news, get_price_data, get_fundamentals
+    from .macro_data import get_macroeconomic_data
     from .sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
     from .financial_analysis import compute_features, create_feature_vector, compute_financial_score
     from .scoring import (
@@ -23,6 +24,7 @@ try:
     )
 except ImportError:
     from src.data_collection import get_news, get_price_data, get_fundamentals
+    from src.macro_data import get_macroeconomic_data
     from src.sentiment_analysis import SentimentAnalyzer, analyze_news_sentiment, aggregate_sentiment
     from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
     from src.scoring import (
@@ -87,6 +89,17 @@ def analyze_company(
         print("   📊 Finansal göstergeler çekiliyor...")
         fundamentals = get_fundamentals(ticker)
     
+    # Makroekonomik veriler (opsiyonel)
+    macro_data = None
+    try:
+        print("   🌍 Makroekonomik veriler çekiliyor...")
+        # Ticker'dan ülke kodu çıkar (basit yaklaşım)
+        country = "TR" if ".IS" in ticker or ticker.endswith(".IS") else "US"
+        macro_data = get_macroeconomic_data(country=country)
+    except Exception as e:
+        print(f"   ⚠️  Makroekonomik veri çekilemedi: {e}")
+        macro_data = None
+    
     print("✅ Veri toplama tamamlandı.\n")
     
     # 2. SENTIMENT ANALİZİ
@@ -106,8 +119,8 @@ def analyze_company(
     # Feature'ları hesapla
     price_df_with_features = compute_features(price_df)
     
-    # Feature vektörü oluştur
-    feature_vector = create_feature_vector(price_df_with_features, fundamentals)
+    # Feature vektörü oluştur (fundamentals ve macro_data ile)
+    feature_vector = create_feature_vector(price_df_with_features, fundamentals, macro_data)
     
     # Finansal skor
     financial_score = compute_financial_score(feature_vector)
@@ -184,6 +197,8 @@ def analyze_company(
         'financial_score': financial_score,
         'overall_score': overall_score,
         'interpretation': interpretation,
+        'fundamentals': fundamentals,
+        'macro_data': macro_data,
         'direction_prediction': direction_prediction,
         'news_count': len(news_df),
         'news_df': news_df_with_sentiment,
