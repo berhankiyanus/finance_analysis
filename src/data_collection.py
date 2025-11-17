@@ -106,9 +106,16 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         total_results = data.get('totalResults', 0)
         
         print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} haber döndürüldü")
+        print(f"   📅 Tarih aralığı: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}")
+        print(f"   🔍 Arama terimi: '{company_name}'")
         
         if not articles:
-            print(f"⚠️  NewsAPI'den {len(articles)} haber döndü. Dummy veri kullanılıyor.")
+            if total_results == 0:
+                print(f"⚠️  NewsAPI'de '{company_name}' için son {days_back} günde haber bulunamadı.")
+                print(f"   💡 İpucu: Şirket adını İngilizce veya ticker sembolü ile deneyin (örn: 'AAPL' yerine 'Apple Inc.')")
+            else:
+                print(f"⚠️  NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")
+            print("⚠️  Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
         
         news_list = []
