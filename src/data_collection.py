@@ -104,6 +104,24 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             combined_search = f"{company_name} {ticker}"
             search_terms.append(combined_search)
         
+        # Finansal etkisi olan haberler için arama terimleri ekle
+        # Bu terimler şirket hakkında finansal haberleri bulmaya yardımcı olur
+        financial_keywords = [
+            "earnings", "profit", "revenue", "financial results", "quarterly results",
+            "stock price", "share price", "trading", "market", "investment",
+            "growth", "decline", "loss", "gain", "dividend", "acquisition", "merger"
+        ]
+        
+        # Şirket adı + finansal terim kombinasyonları (sadece ilk 3 terim için)
+        if company_name:
+            for keyword in financial_keywords[:3]:  # İlk 3 finansal terim
+                search_terms.append(f"{company_name} {keyword}")
+        
+        # Ticker + finansal terim kombinasyonları
+        if ticker:
+            for keyword in financial_keywords[:3]:
+                search_terms.append(f"{ticker} {keyword}")
+        
         # NewsAPI'den haber çek - farklı stratejiler dene
         articles = []
         total_results = 0
@@ -271,15 +289,16 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     if first_word in title_lower or first_word in summary_lower or first_word in content_lower:
                         relevance_score += 0.1
                 
-                # Gemini API ile relevance kontrolü (eğer mevcut ve relevance score düşükse)
+                # Gemini API ile relevance ve finansal etki kontrolü (tüm haberler için)
                 gemini_relevance_score = None
-                if gemini_model and relevance_score < 0.5:
+                financial_impact_score = None
+                if gemini_model:
                     try:
-                        # Haber metnini hazırla
-                        news_text = f"{title}\n\n{summary}\n\n{content[:500]}"  # İlk 500 karakter
+                        # Haber metnini hazırla (daha fazla içerik)
+                        news_text = f"{title}\n\n{summary}\n\n{content[:800]}"  # İlk 800 karakter
                         
-                        # Gemini'ye relevance kontrolü için prompt
-                        relevance_prompt = f"""Sen bir finansal analiz uzmanısın. Aşağıdaki haberin "{company_name}" şirketi ile ne kadar alakalı olduğunu değerlendir.
+                        # Gemini'ye relevance ve finansal etki kontrolü için prompt
+                        relevance_prompt = f"""Sen bir finansal analiz uzmanısın. Aşağıdaki haberin "{company_name}" şirketi için finansal açıdan ne kadar önemli olduğunu değerlendir.
 
 ŞİRKET: {company_name}
 TICKER: {ticker if ticker else 'Belirtilmemiş'}
@@ -288,13 +307,22 @@ HABER:
 {news_text}
 
 GÖREVİN:
-Bu haberin "{company_name}" şirketi ile alakalı olup olmadığını belirle. Haber şirket hakkında mı, yoksa sadece genel bir haber mi?
+Bu haberin "{company_name}" şirketi için finansal açıdan önemli olup olmadığını belirle. Haber:
+1. Şirket hakkında mı? (şirket adı, ticker, iş operasyonları)
+2. Şirketin borsa performansına, fiyatına, değerine etkisi var mı?
+3. Finansal sonuçlar, kâr/zarar, yatırım, büyüme, düşüş, kriz, başarı gibi konular içeriyor mu?
+
+ÖNEMLİ KRİTERLER:
+- ✅ ALKALI VE ÖNEMLİ: Şirket hakkında finansal sonuçlar, kâr/zarar, yatırım, büyüme, düşüş, fiyat hareketleri, borsa performansı, iş geliştirmeleri, sorunlar, krizler
+- ❌ ALKASIZ VEYA ÖNEMSİZ: Sadece genel piyasa haberleri, şirket adı geçiyor ama finansal etkisi yok, rutin duyurular, sosyal sorumluluk projeleri (finansal etkisi yoksa), genel sektör haberleri
 
 Yanıtını SADECE şu formatta JSON olarak ver:
 {{
     "is_relevant": true veya false,
-    "relevance_score": 0.0 ile 1.0 arası bir sayı (ne kadar alakalı),
-    "reason": "Kısa açıklama (Türkçe, 1 cümle)"
+    "relevance_score": 0.0 ile 1.0 arası (ne kadar alakalı - şirket hakkında mı?),
+    "financial_impact": 0.0 ile 1.0 arası (finansal etkisi ne kadar? - borsa/fiyat/kâr/zarar etkisi),
+    "has_financial_impact": true veya false (finansal etkisi var mı?),
+    "reason": "Kısa açıklama (Türkçe, 1-2 cümle)"
 }}
 
 SADECE JSON yanıt ver, başka hiçbir şey yazma."""
@@ -310,14 +338,28 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                         
                         result = json.loads(response_text)
                         
-                        if result.get('is_relevant', False):
-                            gemini_relevance_score = float(result.get('relevance_score', 0.5))
-                            # Gemini'nin relevance score'unu kullan (daha güvenilir)
-                            relevance_score = max(relevance_score, gemini_relevance_score)
-                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı (score: {gemini_relevance_score:.2f})")
+                        gemini_relevance_score = float(result.get('relevance_score', 0.0))
+                        financial_impact_score = float(result.get('financial_impact', 0.0))
+                        has_financial_impact = result.get('has_financial_impact', False)
+                        is_relevant = result.get('is_relevant', False)
+                        
+                        # Finansal etkisi olmayan haberleri filtrele
+                        if not has_financial_impact and financial_impact_score < 0.3:
+                            print(f"🤖 Gemini: '{title[:50]}...' -> Finansal etkisi yok, filtreleniyor (impact: {financial_impact_score:.2f})")
+                            continue  # Finansal etkisi olmayan haberi atla
+                        
+                        # Hem relevance hem finansal etkiyi dikkate al
+                        if is_relevant and has_financial_impact:
+                            # Kombine score: relevance (40%) + financial_impact (60%)
+                            combined_score = (gemini_relevance_score * 0.4) + (financial_impact_score * 0.6)
+                            relevance_score = max(relevance_score, combined_score)
+                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı ve finansal etkisi var (relevance: {gemini_relevance_score:.2f}, impact: {financial_impact_score:.2f}, combined: {combined_score:.2f})")
+                        elif is_relevant:
+                            # Alakalı ama finansal etkisi düşük - relevance score'u kullan
+                            relevance_score = max(relevance_score, gemini_relevance_score * 0.7)  # Düşük ağırlık
+                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı ama finansal etkisi düşük (relevance: {gemini_relevance_score:.2f})")
                         else:
-                            # Gemini alakasız diyorsa, relevance score'u düşür
-                            gemini_relevance_score = float(result.get('relevance_score', 0.0))
+                            # Alakasız - relevance score'u düşür
                             relevance_score = min(relevance_score, gemini_relevance_score)
                             print(f"🤖 Gemini: '{title[:50]}...' -> Alakasız (score: {gemini_relevance_score:.2f})")
                             
@@ -325,9 +367,13 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                         # Gemini hatası - normal relevance score'u kullan
                         pass
                 
-                # Eğer relevance çok düşükse (0.3'ten az), haber alakasız olabilir - atla
-                if relevance_score < 0.3:
+                # Eğer relevance çok düşükse (0.4'ten az) veya finansal etkisi yoksa, haber alakasız olabilir - atla
+                if relevance_score < 0.4:
                     continue  # Alakasız haberi atla
+                
+                # Finansal etkisi olmayan haberleri de filtrele (eğer Gemini kontrolü yapılmadıysa)
+                if financial_impact_score is not None and financial_impact_score < 0.3:
+                    continue  # Finansal etkisi olmayan haberi atla
                 
                 news_list.append({
                     'title': title,
