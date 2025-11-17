@@ -92,7 +92,7 @@ if page == "🏠 Ana Sayfa - Analiz":
             min_value=7,
             max_value=90,
             value=30,
-            help="Kaç gün geriye gidilecek"
+            help="Bugün dahil son X günün haberleri analiz edilir. Anlık haberler otomatik olarak dahil edilir."
         )
         
         sentiment_weight = st.slider(

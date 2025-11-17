@@ -48,16 +48,18 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     # NewsAPI'den haber çek
     try:
         # Tarih aralığını hesapla
+        # end_date bugünün sonuna kadar (anlık haberler dahil)
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days_back)
         
         # NewsAPI isteği
+        # 'to' parametresi bugünün tarihini içerir, böylece bugünün haberleri de dahil edilir
         url = "https://newsapi.org/v2/everything"
         params = {
             'q': company_name,
             'from': start_date.strftime('%Y-%m-%d'),
-            'to': end_date.strftime('%Y-%m-%d'),
-            'sortBy': 'publishedAt',
+            'to': end_date.strftime('%Y-%m-%d'),  # Bugün dahil
+            'sortBy': 'publishedAt',  # En yeni haberler önce
             'language': 'tr,en',  # Türkçe ve İngilizce
             'pageSize': 100,
             'apiKey': api_key
@@ -87,7 +89,15 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         # Boş haberleri filtrele
         news_df = news_df[news_df['title'].str.len() > 10]
         
-        print(f"✅ {len(news_df)} haber bulundu.")
+        # Tarihe göre sırala (en yeni önce)
+        if not news_df.empty and 'published_at' in news_df.columns:
+            news_df = news_df.sort_values('published_at', ascending=False).reset_index(drop=True)
+        
+        print(f"✅ {len(news_df)} haber bulundu (bugün dahil son {days_back} gün).")
+        if not news_df.empty:
+            latest_news_date = news_df['published_at'].max()
+            print(f"   En yeni haber: {latest_news_date.strftime('%Y-%m-%d %H:%M')}")
+        
         return news_df
         
     except requests.exceptions.RequestException as e:
