@@ -13,16 +13,24 @@
 
 ## 🚀 Hızlı Başlatma (Önerilen)
 
-### FastAPI için:
+### Yöntem 1: Doğrudan Script (En Kolay - Önerilen)
+
+**FastAPI için:**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+./BASLAT_DIRECT.sh
+```
+
+**Streamlit için (başka bir terminal):**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+./BASLAT_STREAMLIT_DIRECT.sh
+```
+
+### Yöntem 2: Normal Script (activate çalışıyorsa)
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 ./BASLAT.sh
-```
-
-### Streamlit için (başka bir terminal):
-```bash
-cd /Users/berhankiyanus/Desktop/Finance
-./BASLAT_STREAMLIT.sh
 ```
 
 ## 📝 Manuel Başlatma
@@ -55,12 +63,22 @@ pip install streamlit plotly
 
 ## 🔍 Sorun Giderme
 
-### "source: operation not permitted" Hatası
+### "source: operation not permitted" veya ".: operation not permitted" Hatası
 
-zsh kullanıyorsanız `source` yerine `.` (nokta) kullanın:
+Bu durumda **doğrudan venv/bin/uvicorn kullanın:**
+
 ```bash
-. venv/bin/activate
+cd /Users/berhankiyanus/Desktop/Finance
+./BASLAT_DIRECT.sh
 ```
+
+Veya manuel olarak:
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Not:** `venv/bin/uvicorn` doğrudan çalıştırılabilir, activate gerekmez!
 
 ### "command not found: uvicorn" Hatası
 
@@ -93,9 +111,20 @@ uvicorn api.main:app --reload
 
 ```bash
 # Terminal 1: FastAPI
-cd /Users/berhankiyanus/Desktop/Finance
+Last login: Tue Nov 18 02:48:48 on ttys000
+berhankiyanus@Berhan-MacBook-Pro ~ % cd /Users/berhankiyanus/Desktop/Finance
 . venv/bin/activate
 uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+.: operation not permitted: venv/bin/activate
+zsh: command not found: uvicorn
+berhankiyanus@Berhan-MacBook-Pro Finance % cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate
+uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+.: operation not permitted: venv/bin/activate
+zsh: command not found: uvicorn
+berhankiyanus@Berhan-MacBook-Pro Finance % 
+
+
 
 # Terminal 2: Streamlit
 cd /Users/berhankiyanus/Desktop/Finance

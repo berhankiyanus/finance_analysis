@@ -3,8 +3,16 @@
 
 cd /Users/berhankiyanus/Desktop/Finance
 
-# Virtual environment'ı aktifleştir
-source venv/bin/activate 2>/dev/null || . venv/bin/activate
+# Virtual environment'ı aktifleştir (zsh uyumlu)
+if [ -f venv/bin/activate ]; then
+    source venv/bin/activate 2>/dev/null || {
+        # Eğer source çalışmazsa, PATH'i manuel ekle
+        export PATH="/Users/berhankiyanus/Desktop/Finance/venv/bin:$PATH"
+    }
+else
+    echo "❌ venv/bin/activate bulunamadı!"
+    exit 1
+fi
 
 # Gerekli paketleri kontrol et ve yükle
 echo "📦 Paketler kontrol ediliyor..."
