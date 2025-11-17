@@ -57,3 +57,46 @@ jobs:
         streamlit_token: ${{ secrets.STREAMLIT_TOKEN }}
         app_path: app.py
 
+  # Otomatik Model Yeniden Eğitimi (Haftalık - Pazar gecesi)
+  retrain_models:
+    name: Otomatik Model Yeniden Eğitimi
+    runs-on: ubuntu-latest
+    # Her Pazar gecesi 02:00 UTC'de çalış (cron: dakika saat gün ay hafta)
+    # schedule:
+    #   - cron: '0 2 * * 0'  # Her Pazar gecesi 02:00 UTC
+    # Manuel tetikleme için (şimdilik)
+    if: false  # Otomatik çalışmasını istemiyorsanız false yapın
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Eğitilecek Modeller Listesi
+      run: |
+        echo "THYAO,EREGL,TUPRS,GARAN,AKBNK" > models_to_train.txt
+    
+    - name: Modelleri Yeniden Eğit
+      run: |
+        python scripts/auto_retrain.py --ticker THYAO --period 2y --model-type random_forest || echo "THYAO eğitimi başarısız"
+        python scripts/auto_retrain.py --ticker EREGL --period 2y --model-type random_forest || echo "EREGL eğitimi başarısız"
+        python scripts/auto_retrain.py --ticker TUPRS --period 2y --model-type random_forest || echo "TUPRS eğitimi başarısız"
+    
+    - name: Model Artifact'larını Yükle
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: trained-models
+        path: models/*.pkl
+        retention-days: 30
+
