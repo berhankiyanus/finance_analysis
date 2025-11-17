@@ -1228,7 +1228,11 @@ elif page == "📊 Sektörel Analiz":
                 with st.spinner("Sektör korelasyon matrisi hesaplanıyor..."):
                     corr_matrix = analyze_sector_correlation(sectors[selected_sector], period="6mo")
                     
-                    if not corr_matrix.empty:
+                    # Hata mesajını kontrol et
+                    if hasattr(corr_matrix, 'attrs') and 'error' in corr_matrix.attrs:
+                        st.error(f"❌ {corr_matrix.attrs['error']}")
+                        st.info(f"💡 **İpucu:** Seçilen sektör: {selected_sector}, Hisseler: {', '.join(sectors[selected_sector][:5])}")
+                    elif not corr_matrix.empty:
                         st.success("✅ Korelasyon matrisi hesaplandı!")
                         
                         # Heatmap

@@ -214,16 +214,29 @@ def analyze_sector_correlation(
                 continue
         
         if len(price_data) < 2:
-            print(f"⚠️  Yeterli fiyat verisi bulunamadı (sadece {len(price_data)} hisse)")
-            return pd.DataFrame()
+            error_msg = f"Yeterli fiyat verisi bulunamadı (sadece {len(price_data)} hisse başarılı: {list(price_data.keys())})"
+            print(f"⚠️  {error_msg}")
+            # Hata mesajını içeren özel DataFrame döndür
+            error_df = pd.DataFrame()
+            error_df.attrs = {'error': error_msg}
+            return error_df
         
         # Tüm tarihleri birleştir
         all_dates = set()
-        for series in price_data.values():
+        for ticker, series in price_data.items():
             all_dates.update(series.index)
+            print(f"   {ticker}: {len(series)} gün veri")
+        
+        if len(all_dates) == 0:
+            error_msg = "Hiç tarih bulunamadı"
+            print(f"⚠️  {error_msg}")
+            error_df = pd.DataFrame()
+            error_df.attrs = {'error': error_msg}
+            return error_df
         
         # Yeni index oluştur
         new_index = pd.DatetimeIndex(sorted(all_dates))
+        print(f"   Toplam {len(new_index)} benzersiz tarih")
         
         # DataFrame oluştur ve reindex et
         price_df = pd.DataFrame(price_data)
@@ -236,19 +249,33 @@ def analyze_sector_correlation(
         price_df = price_df.dropna()
         
         if len(price_df) < 30:
-            print(f"⚠️  Yeterli ortak veri noktası yok (sadece {len(price_df)} gün)")
-            return pd.DataFrame()
+            error_msg = f"Yeterli ortak veri noktası yok (sadece {len(price_df)} gün, {len(price_data)} hisse)"
+            print(f"⚠️  {error_msg}")
+            error_df = pd.DataFrame()
+            error_df.attrs = {'error': error_msg}
+            return error_df
         
         # Getiri hesapla
         returns_df = price_df.pct_change().dropna()
         
         if len(returns_df) < 10:
-            print(f"⚠️  Yeterli getiri verisi yok (sadece {len(returns_df)} gün)")
-            return pd.DataFrame()
+            error_msg = f"Yeterli getiri verisi yok (sadece {len(returns_df)} gün)"
+            print(f"⚠️  {error_msg}")
+            error_df = pd.DataFrame()
+            error_df.attrs = {'error': error_msg}
+            return error_df
         
         # Korelasyon matrisi
         correlation_matrix = returns_df.corr()
         
+        if correlation_matrix.empty:
+            error_msg = "Korelasyon matrisi boş"
+            print(f"⚠️  {error_msg}")
+            error_df = pd.DataFrame()
+            error_df.attrs = {'error': error_msg}
+            return error_df
+        
+        print(f"✅ Korelasyon matrisi oluşturuldu: {correlation_matrix.shape}")
         return correlation_matrix
         
     except Exception as e:
