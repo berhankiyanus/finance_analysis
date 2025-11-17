@@ -186,16 +186,27 @@ if page == "🏠 Ana Sayfa - Analiz":
                         
                         # API key kontrolü ve uyarı - dummy veri kontrolü
                         news_df = results.get('news_df', pd.DataFrame())
+                        news_count = results.get('news_count', 0)
                         is_dummy_data = False
+                        
+                        # Dummy veri kontrolü: Eğer haberler varsa ve tüm haberlerin kaynağı "Dummy News" ise
                         if not news_df.empty and 'source' in news_df.columns:
-                            # Dummy veri kontrolü: Eğer tüm haberlerin kaynağı "Dummy News" ise
                             unique_sources = news_df['source'].unique()
                             if len(unique_sources) == 1 and 'Dummy News' in unique_sources:
+                                is_dummy_data = True
+                        elif news_df.empty and news_count == 0:
+                            # Boş DataFrame ve 0 haber sayısı - bu durumda API key kontrolü yap
+                            # Eğer API key varsa ama haber bulunamadıysa, bu dummy data değil
+                            # API key yoksa, dummy data kullanılmış olabilir
+                            # Sidebar'dan API key durumunu kontrol et
+                            if NEWS_API_KEY is None:
                                 is_dummy_data = True
                         
                         if is_dummy_data:
                             st.warning("⚠️ **Dikkat:** Dummy (test) verisi kullanılıyor. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
-                        elif results.get('news_count', 0) <= 3:
+                        elif news_count == 0 and NEWS_API_KEY is not None:
+                            st.info("ℹ️ **Bilgi:** API key çalışıyor ancak seçilen periyotta haber bulunamadı. Bu normal olabilir - şirket adını veya periyodu değiştirmeyi deneyin.")
+                        elif news_count > 0 and news_count <= 3:
                             st.info("ℹ️ **Bilgi:** Çok az haber bulundu. Bu, seçilen periyotta gerçekten az haber olmasından kaynaklanıyor olabilir. Daha fazla haber için periyodu artırabilirsiniz.")
                         
                         # Skorlar
