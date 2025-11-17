@@ -562,7 +562,8 @@ def generate_detailed_report(
     
     report['summary'] = '\n'.join(summary_parts)
     
-    # Gemini API ile otomatik analist raporu (eğer isteniyorsa)
+    # Gemini API ile otomatik analist raporu (eğer API key varsa)
+    use_gemini = os.getenv('GEMINI_API_KEY') is not None
     if use_gemini:
         try:
             # Gemini modeli yükle
