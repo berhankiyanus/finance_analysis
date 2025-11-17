@@ -544,7 +544,7 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
     Parametreler:
     ------------
     ticker : str
-        Borsa kodu (örn: "AAPL", "THYAO.IS")
+        Borsa kodu (örn: "AAPL", "THYAO.IS", "KCHOL")
     period : str
         Veri periyodu (örn: "1mo", "3mo", "6mo", "1y", "2y", "5y")
     
@@ -555,8 +555,16 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
     """
     
     try:
+        # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
+        # 5 karakterli ve sadece harf içeren hisseler için .IS ekle
+        ticker_formatted = ticker
+        if not ('.IS' in ticker or ticker.endswith('.IS')):
+            if len(ticker) == 5 and ticker.isalpha() and ticker.isupper():
+                ticker_formatted = ticker + '.IS'
+                print(f"📊 Türk hissesi tespit edildi: {ticker} -> {ticker_formatted}")
+        
         # yfinance ile veri çek
-        stock = yf.Ticker(ticker)
+        stock = yf.Ticker(ticker_formatted)
         hist = stock.history(period=period)
         
         if hist.empty:

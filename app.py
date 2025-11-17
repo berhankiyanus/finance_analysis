@@ -851,7 +851,11 @@ if page == "🏠 Ana Sayfa - Analiz":
                                 price_df = results['price_df']
                                 current_price = price_df.iloc[-1]['close']
                                 
-                                st.metric("Mevcut Fiyat", f"${current_price:.2f}" if not ticker.endswith('.IS') else f"₺{current_price:.2f}")
+                                # Türk hissesi kontrolü (.IS uzantısı veya 5 karakterli)
+                                is_turkish_stock = ticker.endswith('.IS') or (len(ticker) == 5 and ticker.isalpha() and ticker.isupper())
+                                price_display = f"₺{current_price:.2f}" if is_turkish_stock else f"${current_price:.2f}"
+                                
+                                st.metric("Mevcut Fiyat", price_display)
                                 
                                 # Basit portföy önerisi
                                 if results['overall_score'] >= 70:
