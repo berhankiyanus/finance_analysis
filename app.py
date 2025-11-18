@@ -103,43 +103,207 @@ st.set_page_config(
     page_title="Finansal Analiz ve Haber Sentiment Analizi",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "Finansal Analiz ve AI Destekli Tahmin Sistemi"
+    }
 )
 
-# CSS stilleri
+# Modern CSS stilleri
 st.markdown("""
 <style>
+    /* Ana stil ayarları */
+    .main {
+        padding: 2rem 1rem;
+    }
+    
+    /* Modern header */
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
+        font-size: 3rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         text-align: center;
-        padding: 1rem 0;
+        padding: 1.5rem 0;
+        margin-bottom: 1rem;
+        letter-spacing: -0.02em;
     }
+    
+    .sub-header {
+        text-align: center;
+        color: #64748b;
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
+        font-weight: 400;
+    }
+    
+    /* Modern kartlar */
     .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
     }
+    
+    .metric-card:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        transform: translateY(-2px);
+    }
+    
+    /* Modern butonlar */
     .stButton>button {
         width: 100%;
-        background-color: #1f77b4;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        font-weight: bold;
+        font-weight: 600;
+        border: none;
+        border-radius: 0.75rem;
+        padding: 0.75rem 1.5rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Sidebar stil */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        padding: 1rem;
+    }
+    
+    /* Input alanları */
+    .stTextInput>div>div>input,
+    .stSelectbox>div>div>select {
+        border-radius: 0.5rem;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextInput>div>div>input:focus,
+    .stSelectbox>div>div>select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Başlıklar */
+    h1, h2, h3 {
+        color: #1e293b;
+        font-weight: 700;
+    }
+    
+    h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    h2 {
+        font-size: 2rem;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+    
+    h3 {
+        font-size: 1.5rem;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Info/Error/Success mesajları */
+    .stAlert {
+        border-radius: 0.75rem;
+        border-left: 4px solid;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.5rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 0.5rem 0.5rem 0 0;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+    }
+    
+    /* Metrikler */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.9rem;
+        color: #64748b;
+        font-weight: 500;
+    }
+    
+    /* Divider */
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 2px solid #e2e8f0;
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+    
+    /* Genel iyileştirmeler */
+    .stMarkdown {
+        line-height: 1.7;
+    }
+    
+    /* Spinner */
+    .stSpinner > div {
+        border-color: #667eea transparent transparent transparent;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Ana başlık
-st.markdown('<h1 class="main-header">📊 Finansal Analiz ve Haber Sentiment Analizi</h1>', unsafe_allow_html=True)
-st.markdown("---")
+st.markdown('<h1 class="main-header">📊 Finansal Analiz ve AI Destekli Tahmin</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Yapay zeka destekli finansal analiz ve hisse senedi tahmin platformu</p>', unsafe_allow_html=True)
 
-# Sidebar - Navigasyon
-st.sidebar.title("🎯 Menü")
+# Sidebar - Modern Navigasyon
+st.sidebar.markdown("""
+<div style="padding: 1rem 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 1.5rem;">
+    <h2 style="margin: 0; color: #1e293b; font-size: 1.5rem; font-weight: 700;">🎯 Menü</h2>
+</div>
+""", unsafe_allow_html=True)
+
 page = st.sidebar.radio(
     "Sayfa Seçin",
-    ["🚀 MVP Tahmin (Sprint 1)", "🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "📊 Sektörel Analiz", "🔥 Trending Hisseler", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"]
+    ["🚀 MVP Tahmin (Sprint 1)", "🏠 Ana Sayfa - Analiz", "📋 İzleme Listesi", "💼 Portföy Optimizasyonu", "📊 Sektörel Analiz", "🔥 Trending Hisseler", "🤖 Model Eğitimi", "📈 Geçmiş Analizler", "ℹ️ Hakkında"],
+    label_visibility="collapsed"
 )
 
 # MVP Tahmin Sayfası (Sprint 1)

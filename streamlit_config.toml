@@ -9,9 +9,9 @@ address = "0.0.0.0"
 gatherUsageStats = false
 
 [theme]
-primaryColor = "#1f77b4"
+primaryColor = "#667eea"
 backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
+secondaryBackgroundColor = "#f8fafc"
+textColor = "#1e293b"
 font = "sans serif"
 
