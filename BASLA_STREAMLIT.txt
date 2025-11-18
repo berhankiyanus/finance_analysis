@@ -3,8 +3,8 @@
 
 cd /Users/berhankiyanus/Desktop/Finance
 
-# Yöntem 1: Python script ile (EN GÜVENİLİR - Önerilen)
-/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
+# Yöntem 1: Tek satırlık Python komutu (EN GÜVENİLİR - Önerilen)
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
 
 # Yöntem 2: Script ile (daha kolay)
 # bash BASLAT_STREAMLIT_DIRECT.sh

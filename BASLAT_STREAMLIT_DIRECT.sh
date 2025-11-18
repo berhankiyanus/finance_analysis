@@ -24,6 +24,6 @@ echo ""
 echo "⚠️  Durdurmak için: Ctrl+C"
 echo ""
 
-# Python script ile çalıştır (Python path sorunlarını çözer)
-/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
+# Tek satırlık Python komutu ile çalıştır (dosya izin sorunlarını atlar)
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
 

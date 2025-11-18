@@ -50,10 +50,10 @@ pip install fastapi "uvicorn[standard]"
 
 ### 2. Streamlit'i Başlat (başka bir terminal)
 
-**Önerilen Yöntem (Python script ile - EN GÜVENİLİR):**
+**Önerilen Yöntem (Tek satırlık Python komutu - EN GÜVENİLİR):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
 ```
 
 **Alternatif: Script ile:**
@@ -128,16 +128,16 @@ venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 **Neden?** `venv/bin/python3 -m uvicorn` doğrudan Python modülü olarak çalıştırır ve izin sorunlarını atlar.
 
-### "python3: realpath: venv/bin/: Operation not permitted" veya "error evaluating path" Hatası (Streamlit)
+### "python3: realpath: venv/bin/: Operation not permitted" veya "error evaluating path" veya "can't open file: Operation not permitted" Hatası (Streamlit)
 
-Bu durumda **Python script kullanın** (EN GÜVENİLİR ÇÖZÜM):
+Bu durumda **Tek satırlık Python komutu kullanın** (EN GÜVENİLİR ÇÖZÜM):
 
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
 ```
 
-**Neden?** macOS Gatekeeper ve Python path sorunları nedeniyle `venv/bin/python3` veya `-m streamlit` çalışmıyor. `streamlit_start.py` script'i Python path'ini düzgün ayarlayarak streamlit'i başlatır.
+**Neden?** macOS Gatekeeper dosya erişimini engelliyor. Tek satırlık Python komutu dosya okuma gerektirmez, doğrudan Python kodunu çalıştırır.
 
 ### "command not found: uvicorn" Hatası
 
