@@ -24,5 +24,6 @@ echo ""
 echo "⚠️  Durdurmak için: Ctrl+C"
 echo ""
 
-venv/bin/streamlit run app.py
+# Python modülü olarak çalıştır (izin sorunlarını atlar)
+venv/bin/python3 -m streamlit run app.py
 

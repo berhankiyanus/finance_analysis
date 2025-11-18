@@ -50,6 +50,13 @@ pip install fastapi "uvicorn[standard]"
 
 ### 2. Streamlit'i Başlat (başka bir terminal)
 
+**Önerilen Yöntem (Python modülü olarak):**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/python3 -m streamlit run app.py
+```
+
+**Alternatif (activate çalışıyorsa):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 . venv/bin/activate
@@ -58,7 +65,7 @@ streamlit run app.py
 
 **Eğer `streamlit` bulunamazsa:**
 ```bash
-pip install streamlit plotly
+venv/bin/python3 -m pip install streamlit plotly
 ```
 
 ## 🔍 Sorun Giderme
@@ -152,6 +159,7 @@ uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 .: operation not permitted: venv/bin/activate
 zsh: command not found: uvicorn
 berhankiyanus@Berhan-MacBook-Pro Finance % 
+
 
 
 

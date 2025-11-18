@@ -2,5 +2,8 @@
 # Bu dosyadaki komutları terminal'e kopyalayıp yapıştırın
 
 cd /Users/berhankiyanus/Desktop/Finance
-venv/bin/streamlit run app.py
+venv/bin/python3 -m streamlit run app.py
+
+# Alternatif (eğer yukarıdaki çalışmazsa):
+# venv/bin/streamlit run app.py
 
