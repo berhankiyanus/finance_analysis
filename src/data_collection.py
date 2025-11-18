@@ -395,8 +395,16 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 print(f"   ℹ️  API key çalışıyor, ancak bu şirket için haber bulunamadı.")
                 
                 # NewsAPI başarısız - KAP raporlarını dene (Türk şirketleri için)
-                if ticker and (ticker.endswith('.IS') or len(ticker.replace('.IS', '')) == 5):
-                    print("   🔄 NewsAPI'de haber yok, KAP raporları deneniyor...")
+                # Türk hisseleri: .IS uzantılı veya 5 karakterli (KCHOL, THYAO, vb.)
+                ticker_clean_for_check = ticker.replace('.IS', '').replace('.', '').upper() if ticker else ''
+                is_turkish_stock = ticker and (
+                    ticker.endswith('.IS') or 
+                    len(ticker_clean_for_check) == 5 or
+                    (len(ticker_clean_for_check) >= 4 and ticker_clean_for_check.isalpha())
+                )
+                
+                if is_turkish_stock:
+                    print(f"   🔄 NewsAPI'de haber yok, KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_check})...")
                     try:
                         from .kap_scraper import get_kap_financial_reports
                     except ImportError:
@@ -1222,6 +1230,55 @@ def get_all_data_for_stock(
                         print(f"   ✅ Google Search'ten {len(google_news)} haber eklendi.")
                 except Exception as google_error:
                     print(f"   ⚠️  Google Search hatası: {google_error}")
+                    import traceback
+                    traceback.print_exc()
+        
+        # Eğer hala haber yoksa, KAP raporlarını dene (get_news içinde de denenmiş olabilir ama tekrar deneyelim)
+        if results['news_df'].empty:
+            print("   🔄 Haber bulunamadı, KAP raporları deneniyor...")
+            ticker_clean_for_kap = ticker.replace('.IS', '').replace('.', '').upper()
+            is_turkish_stock = ticker and (
+                ticker.endswith('.IS') or 
+                len(ticker_clean_for_kap) == 5 or
+                (len(ticker_clean_for_kap) >= 4 and ticker_clean_for_kap.isalpha())
+            )
+            
+            if is_turkish_stock:
+                try:
+                    from .kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    try:
+                        from src.kap_scraper import get_kap_financial_reports
+                    except ImportError:
+                        get_kap_financial_reports = None
+                
+                if get_kap_financial_reports:
+                    try:
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        
+                        if kap_reports and len(kap_reports) > 0:
+                            print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                            # KAP raporlarını haber formatına çevir
+                            kap_news_list = []
+                            for report in kap_reports:
+                                kap_news_list.append({
+                                    'title': report.get('title', 'KAP Bildirimi'),
+                                    'summary': report.get('title', ''),
+                                    'content': report.get('title', ''),
+                                    'published_at': report.get('date', datetime.now()),
+                                    'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                    'url': report.get('link', ''),
+                                    'relevance_score': 0.8
+                                })
+                            
+                            if kap_news_list:
+                                kap_df = pd.DataFrame(kap_news_list)
+                                results['news_df'] = kap_df
+                                print(f"   ✅ {len(kap_df)} haber KAP'tan alındı!")
+                    except Exception as kap_error:
+                        print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                        import traceback
+                        traceback.print_exc()
         
         if not results['news_df'].empty:
             print(f"   ✅ Toplam {len(results['news_df'])} haber bulundu (NewsAPI + Google Search + KAP).")
