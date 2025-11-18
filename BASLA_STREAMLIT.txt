@@ -2,8 +2,14 @@
 # Bu dosyadaki komutları terminal'e kopyalayıp yapıştırın
 
 cd /Users/berhankiyanus/Desktop/Finance
-venv/bin/python3 -m streamlit run app.py
 
-# Alternatif (eğer yukarıdaki çalışmazsa):
-# venv/bin/streamlit run app.py
+# Yöntem 1: Tam yol ile Python (EN GÜVENİLİR)
+PYTHONPATH=/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
+
+# Yöntem 2: Streamlit executable direkt (eğer yukarıdaki çalışmazsa)
+# /opt/homebrew/opt/python@3.14/bin/python3.14 /Users/berhankiyanus/Desktop/Finance/venv/bin/streamlit run app.py
+
+# Yöntem 3: PATH ile (eğer yukarıdakiler çalışmazsa)
+# export PATH="/Users/berhankiyanus/Desktop/Finance/venv/bin:$PATH"
+# streamlit run app.py
 

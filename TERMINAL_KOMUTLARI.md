@@ -50,17 +50,23 @@ pip install fastapi "uvicorn[standard]"
 
 ### 2. Streamlit'i Başlat (başka bir terminal)
 
-**Önerilen Yöntem (Python modülü olarak):**
+**Önerilen Yöntem (PYTHONPATH ile - İzin sorunlarını atlar):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-venv/bin/python3 -m streamlit run app.py
+PYTHONPATH=/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
 ```
 
-**Alternatif (activate çalışıyorsa):**
+**Alternatif 1 (activate çalışıyorsa):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 . venv/bin/activate
 streamlit run app.py
+```
+
+**Alternatif 2 (venv/bin/python3 çalışıyorsa):**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+venv/bin/python3 -m streamlit run app.py
 ```
 
 **Eğer `streamlit` bulunamazsa:**
