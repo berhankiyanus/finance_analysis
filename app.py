@@ -14,10 +14,27 @@ import os
 from dotenv import load_dotenv
 
 # Proje kök dizinini path'e ekle
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
 
-# Yardımcı fonksiyonları import et
-from src.utils import load_api_key_from_streamlit_or_env
+# Streamlit Cloud için ek path düzenlemesi
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Yardımcı fonksiyonları import et (try-except ile güvenli import)
+try:
+    from src.utils import load_api_key_from_streamlit_or_env
+except ImportError:
+    # Fallback: Doğrudan modül import
+    import importlib.util
+    utils_path = project_root / "src" / "utils.py"
+    if utils_path.exists():
+        spec = importlib.util.spec_from_file_location("src.utils", utils_path)
+        utils_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(utils_module)
+        load_api_key_from_streamlit_or_env = utils_module.load_api_key_from_streamlit_or_env
+    else:
+        raise ImportError("src.utils modülü bulunamadı")
 
 # API Key'leri yükle (refactored helper fonksiyon ile)
 NEWS_API_KEY = load_api_key_from_streamlit_or_env(
@@ -35,9 +52,48 @@ GEMINI_API_KEY = load_api_key_from_streamlit_or_env(
 if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
-from src.main import analyze_company
-from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
-from src.data_collection import get_price_data, get_fundamentals
+# Ana modülleri import et (try-except ile güvenli import)
+try:
+    from src.main import analyze_company
+    from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
+    from src.data_collection import get_price_data, get_fundamentals
+except ImportError as e:
+    # Streamlit Cloud için fallback import
+    import importlib.util
+    import importlib
+    
+    # src.main
+    main_path = project_root / "src" / "main.py"
+    if main_path.exists():
+        spec = importlib.util.spec_from_file_location("src.main", main_path)
+        main_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(main_module)
+        analyze_company = main_module.analyze_company
+    else:
+        raise ImportError(f"src.main modülü bulunamadı: {e}")
+    
+    # src.prediction_model
+    prediction_model_path = project_root / "src" / "prediction_model.py"
+    if prediction_model_path.exists():
+        spec = importlib.util.spec_from_file_location("src.prediction_model", prediction_model_path)
+        prediction_model_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(prediction_model_module)
+        train_price_direction_model = prediction_model_module.train_price_direction_model
+        PriceDirectionPredictor = prediction_model_module.PriceDirectionPredictor
+    else:
+        raise ImportError(f"src.prediction_model modülü bulunamadı: {e}")
+    
+    # src.data_collection
+    data_collection_path = project_root / "src" / "data_collection.py"
+    if data_collection_path.exists():
+        spec = importlib.util.spec_from_file_location("src.data_collection", data_collection_path)
+        data_collection_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(data_collection_module)
+        get_price_data = data_collection_module.get_price_data
+        get_fundamentals = data_collection_module.get_fundamentals
+    else:
+        raise ImportError(f"src.data_collection modülü bulunamadı: {e}")
+
 import requests
 
 # Streamlit cache decorator'ları - performans için

@@ -297,8 +297,25 @@ def analyze_sector_correlation(
             return error_df
         
         # Yeni index oluştur (timezone olmadan)
-        all_dates_unique = sorted(set(all_dates))
-        new_index = pd.DatetimeIndex(all_dates_unique)
+        # Tüm tarihleri timezone-naive yap
+        all_dates_naive = []
+        for d in all_dates:
+            try:
+                if hasattr(d, 'tzinfo') and d.tzinfo is not None:
+                    # Timezone-aware ise timezone'u kaldır
+                    all_dates_naive.append(pd.Timestamp(d).tz_localize(None) if hasattr(pd.Timestamp(d), 'tz') else pd.Timestamp(d).replace(tzinfo=None))
+                else:
+                    all_dates_naive.append(pd.Timestamp(d))
+            except Exception as e:
+                # Hata durumunda basit çözüm
+                try:
+                    all_dates_naive.append(pd.Timestamp(d, tz=None))
+                except:
+                    continue  # Geçersiz tarihi atla
+        
+        all_dates_unique = sorted(set(all_dates_naive))
+        # Timezone-naive DatetimeIndex oluştur
+        new_index = pd.DatetimeIndex(all_dates_unique, tz=None)
         print(f"   Toplam {len(new_index)} benzersiz tarih")
         
         # DataFrame oluştur ve reindex et
