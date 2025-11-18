@@ -334,9 +334,10 @@ if page == "🚀 MVP Tahmin (Sprint 1)":
         else:
             with st.spinner(f"📡 {ticker} için tahmin alınıyor..."):
                 try:
-                    # API'ye istek at
+                    # API'ye istek at (POST /predict, body'de JSON)
                     response = requests.post(
-                        f"{api_url}/predict/{ticker}",
+                        f"{api_url}/predict",
+                        json={"hisse_kodu": ticker},
                         timeout=30
                     )
                     
@@ -346,11 +347,17 @@ if page == "🚀 MVP Tahmin (Sprint 1)":
                         # Sonuçları göster
                         st.success("✅ Tahmin başarıyla alındı!")
                         
-                        # Sinyal göster
-                        signal = result.get('signal', 'HOLD')
+                        # FastAPI response formatını Streamlit formatına dönüştür
+                        tahmin_sinyal = result.get('tahmin_sinyal', 'TUT')
                         confidence = result.get('confidence', 0.0)
                         direction = result.get('direction', 'neutral')
-                        model_used = result.get('model_used', False)
+                        skor = result.get('skor', 0.0)
+                        guven = result.get('guven', 'Düşük')
+                        message = result.get('message', '')
+                        
+                        # Sinyal dönüşümü (AL -> BUY, SAT -> SELL, TUT -> HOLD)
+                        signal_map = {'AL': 'BUY', 'SAT': 'SELL', 'TUT': 'HOLD'}
+                        signal = signal_map.get(tahmin_sinyal, 'HOLD')
                         
                         # Sinyal renkleri
                         if signal == 'BUY':
@@ -363,19 +370,34 @@ if page == "🚀 MVP Tahmin (Sprint 1)":
                         # Detaylar
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.metric("Yön", direction.upper())
+                            st.metric("Yön", direction.upper() if direction else 'NEUTRAL')
                             st.metric("Güven", f"{confidence:.1%}")
+                            st.metric("Güven Seviyesi", guven)
                         with col2:
-                            st.metric("Model Kullanıldı", "✅ Evet" if model_used else "❌ Hayır (Rule-based)")
-                            if 'reason' in result:
-                                st.caption(f"Not: {result['reason']}")
+                            st.metric("Skor", f"{skor:.1f}/100")
+                            if message:
+                                st.caption(f"ℹ️ {message}")
+                        
+                        # Olasılıklar varsa göster
+                        if 'probabilities' in result and result['probabilities']:
+                            with st.expander("📊 Olasılık Dağılımı"):
+                                probs = result['probabilities']
+                                for key, value in probs.items():
+                                    st.progress(value, text=f"{key}: {value:.1%}")
                         
                         # JSON göster
                         with st.expander("📄 Detaylı JSON Sonucu"):
                             st.json(result)
                     else:
                         st.error(f"❌ API hatası: {response.status_code}")
-                        st.json(response.json() if response.content else {})
+                        # Ham yanıtı göster (JSON değilse)
+                        try:
+                            error_json = response.json()
+                            st.json(error_json)
+                        except:
+                            # JSON değilse ham metni göster
+                            st.code(f"Ham yanıt:\n{response.text[:500]}", language="text")
+                            st.warning("💡 FastAPI terminalindeki hata mesajını kontrol edin!")
                         
                 except requests.exceptions.ConnectionError:
                     st.error("❌ FastAPI sunucusuna bağlanılamadı!")

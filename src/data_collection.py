@@ -85,7 +85,23 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         url = "https://newsapi.org/v2/everything"
         
         # Arama terimlerini hazırla (farklı varyasyonlar dene)
-        search_terms = [company_name]
+        # ÖNEMLİ: NewsAPI'de arama yaparken hem şirket adı hem ticker hem de kombinasyonlar kullanılır
+        search_terms = []
+        
+        # Ticker sembolü varsa ÖNCE ekle (en spesifik - öncelikli)
+        if ticker:
+            # Ticker'ı temizle (.IS gibi uzantıları kaldır)
+            ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+            search_terms.append(ticker_clean)  # En başa ekle (öncelikli)
+            # Ticker + company_name kombinasyonları
+            search_terms.append(f"{ticker_clean} {company_name}")
+            search_terms.append(f"{company_name} {ticker_clean}")
+            # Ticker + "stock" veya "shares" gibi finansal terimler
+            search_terms.append(f"{ticker_clean} stock")
+            search_terms.append(f"{ticker_clean} shares")
+        
+        # Şirket adını ekle
+        search_terms.append(company_name)
         
         # Türkçe şirket adları için özel işlem (Koç, Sabancı, vb.)
         # Türkçe karakterleri İngilizce karşılıklarına çevir
@@ -106,6 +122,28 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         # Eğer çevrilmiş versiyon farklıysa, onu da ekle
         if company_name_english != company_name:
             search_terms.append(company_name_english)
+        
+        # Türk şirketleri için bilinen İngilizce alternatif isimler
+        turkish_company_aliases = {
+            'Koç Holding': ['Koc Holding', 'Koc Group', 'Koc', 'KCHOL'],
+            'Sabancı Holding': ['Sabanci Holding', 'Sabanci Group', 'Sabanci', 'SAHOL'],
+            'Türk Hava Yolları': ['Turkish Airlines', 'THY', 'THYAO'],
+            'Garanti BBVA': ['Garanti Bank', 'Garanti', 'GARAN'],
+            'Akbank': ['Akbank', 'AKBNK'],
+            'İş Bankası': ['Is Bankasi', 'Is Bank', 'ISCTR'],
+            'BİST': ['BIST', 'Borsa Istanbul', 'Istanbul Stock Exchange'],
+        }
+        
+        # Şirket adı için alternatif isimler varsa ekle
+        for turkish_name, aliases in turkish_company_aliases.items():
+            if turkish_name.lower() in company_name.lower() or company_name.lower() in turkish_name.lower():
+                search_terms.extend(aliases)
+                break
+        
+        # "Holding" kelimesini kaldırarak da dene (daha genel arama)
+        if 'holding' in company_name.lower():
+            search_terms.append(company_name.lower().replace('holding', '').strip())
+            search_terms.append(company_name_english.lower().replace('holding', '').strip())
             # Örnek: "Koç Holding" -> "Koc Holding" ve "Koc"
             if ' ' in company_name_english:
                 words = company_name_english.split()
@@ -118,52 +156,26 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     if second_word not in search_terms:
                         search_terms.append(second_word)
         
-        # Özel şirket adları için alternatif isimler ekle
-        company_aliases = {
-            'Koç Holding': ['Koc Holding', 'Koc Group', 'Koc', 'Koc Holding A.S.', 'Koc Holding AS', 'Koc Holding Inc'],
-            'Sabancı': ['Sabanci', 'Sabanci Holding', 'Sabanci Group'],
-            'Türk Hava Yolları': ['Turk Hava Yollari', 'Turkish Airlines', 'THY', 'THYAO'],
-            'Türk Telekom': ['Turk Telekom', 'Turk Telekomunikasyon', 'TTKOM'],
-            'Ereğli Demir Çelik': ['Eregli Demir Celik', 'Eregli', 'EREGL'],
-            'Tüpraş': ['Tupras', 'Turkiye Petrol Rafinerileri', 'TUPRS']
-        }
-        
-        # Şirket adı için alias'ları ekle
-        for original, aliases in company_aliases.items():
-            if original.lower() in company_name.lower() or company_name.lower() in original.lower():
-                for alias in aliases:
-                    if alias not in search_terms:
-                        search_terms.append(alias)
-        
-        # Ticker sembolü varsa arama terimlerine ekle
-        if ticker:
-            search_terms.append(ticker)
-            # Ticker'ın küçük harfli versiyonunu da ekle
-            if ticker.isupper():
-                search_terms.append(ticker.lower())
-        
-        # Türk şirketleri için özel arama terimleri
-        # "Koç Holding" + "KCHOL" kombinasyonları
-        if ticker and company_name:
-            # Şirket adı + ticker kombinasyonları
-            search_terms.append(f"{company_name} {ticker}")
-            if company_name_english != company_name:
-                search_terms.append(f"{company_name_english} {ticker}")
-        
-        # Duplicate'leri temizle (sırayı koruyarak)
+        # Duplicate'leri temizle (sırayı koruyarak) - önce temizle, sonra eklemelere devam et
         search_terms = list(dict.fromkeys(search_terms))
         
-        print(f"🔍 Toplam {len(search_terms)} arama terimi hazırlandı: {search_terms[:10]}...")  # İlk 10'unu göster
-        
-        # Eğer şirket adı büyük harflerle yazılmışsa (ticker sembolü olabilir), küçük harfe çevir
-        if company_name.isupper() and len(company_name) <= 5:
-            if company_name not in search_terms:  # Zaten eklenmemişse
-                search_terms.append(company_name.lower())
-        
-        # Şirket adı ve ticker'ı birleştirerek de ara (örn: "Apple AAPL")
+        # Şirket adı ve ticker kombinasyonları (duplicate kontrolünden sonra)
         if ticker and company_name:
-            combined_search = f"{company_name} {ticker}"
-            search_terms.append(combined_search)
+            ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+            # Farklı kombinasyonlar dene
+            combinations = [
+                f"{company_name} {ticker_clean}",
+                f"{ticker_clean} {company_name}",
+                f"{company_name_english} {ticker_clean}" if company_name_english != company_name else None
+            ]
+            for combo in combinations:
+                if combo and combo not in search_terms:
+                    search_terms.append(combo)
+        
+        # Son duplicate temizliği
+        search_terms = list(dict.fromkeys(search_terms))
+        
+        print(f"🔍 Toplam {len(search_terms)} arama terimi hazırlandı: {search_terms[:15]}...")  # İlk 15'ini göster
         
         # Finansal etkisi olan haberler için arama terimleri ekle
         # Bu terimler şirket hakkında finansal haberleri bulmaya yardımcı olur
@@ -173,15 +185,30 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             "growth", "decline", "loss", "gain", "dividend", "acquisition", "merger"
         ]
         
-        # Şirket adı + finansal terim kombinasyonları (sadece ilk 3 terim için)
+        # Türkçe finansal terimler (Türk şirketleri için)
+        turkish_financial_keywords = [
+            "kar", "zarar", "gelir", "finansal sonuçlar", "çeyreklik sonuçlar",
+            "hisse fiyatı", "borsa", "yatırım", "büyüme", "düşüş", "temettü", "satın alma", "birleşme"
+        ]
+        
+        # Şirket adı + finansal terim kombinasyonları (İngilizce)
         if company_name:
-            for keyword in financial_keywords[:3]:  # İlk 3 finansal terim
+            for keyword in financial_keywords[:5]:  # İlk 5 finansal terim
                 search_terms.append(f"{company_name} {keyword}")
         
-        # Ticker + finansal terim kombinasyonları
+        # Ticker + finansal terim kombinasyonları (İngilizce)
         if ticker:
-            for keyword in financial_keywords[:3]:
-                search_terms.append(f"{ticker} {keyword}")
+            ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+            for keyword in financial_keywords[:5]:
+                search_terms.append(f"{ticker_clean} {keyword}")
+        
+        # Türk şirketleri için Türkçe finansal terimler
+        if ticker and (ticker.endswith('.IS') or len(ticker.replace('.IS', '')) == 5):
+            ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+            for keyword in turkish_financial_keywords[:5]:
+                search_terms.append(f"{ticker_clean} {keyword}")
+                if company_name:
+                    search_terms.append(f"{company_name} {keyword}")
         
         # NewsAPI'den haber çek - TÜM arama terimlerini dene (daha fazla haber bulmak için)
         articles = []
@@ -190,7 +217,25 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         # Strateji 1: Dil parametresi olmadan geniş arama - TÜM terimleri dene
         print(f"🔍 {len(search_terms)} arama terimi ile geniş arama yapılıyor...")
-        for search_term in search_terms:
+        print(f"   📋 İlk 10 arama terimi: {search_terms[:10]}")
+        
+        # Ticker varsa öncelikli olarak dene (daha spesifik)
+        priority_terms = []
+        other_terms = []
+        if ticker:
+            ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+            for term in search_terms:
+                if ticker_clean in term.upper() or term.upper() == ticker_clean:
+                    priority_terms.append(term)
+                else:
+                    other_terms.append(term)
+        else:
+            other_terms = search_terms
+        
+        # Öncelikli terimleri önce dene
+        search_terms_ordered = priority_terms + other_terms
+        
+        for search_term in search_terms_ordered:
             params = {
                 'q': search_term,
                 'from': start_date.strftime('%Y-%m-%d'),
@@ -291,7 +336,46 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 print(f"⚠️  NewsAPI'de '{company_name}' için son {days_back} günde haber bulunamadı.")
                 print(f"   💡 İpucu: Şirket adını İngilizce veya ticker sembolü ile deneyin (örn: 'AAPL' yerine 'Apple Inc.')")
                 print(f"   ℹ️  API key çalışıyor, ancak bu şirket için haber bulunamadı.")
-                # API key çalışıyor ama haber yok - boş DataFrame döndür (dummy veri değil)
+                
+                # NewsAPI başarısız - KAP raporlarını dene (Türk şirketleri için)
+                if ticker and (ticker.endswith('.IS') or len(ticker.replace('.IS', '')) == 5):
+                    print("   🔄 NewsAPI'de haber yok, KAP raporları deneniyor...")
+                    try:
+                        from .kap_scraper import get_kap_financial_reports
+                    except ImportError:
+                        try:
+                            from src.kap_scraper import get_kap_financial_reports
+                        except ImportError:
+                            get_kap_financial_reports = None
+                    
+                    if get_kap_financial_reports:
+                        try:
+                            ticker_clean = ticker.replace('.IS', '').upper()
+                            kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                            
+                            if kap_reports and len(kap_reports) > 0:
+                                print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                                # KAP raporlarını haber formatına çevir
+                                news_list = []
+                                for report in kap_reports:
+                                    news_list.append({
+                                        'title': report.get('title', 'KAP Bildirimi'),
+                                        'summary': report.get('title', ''),
+                                        'content': report.get('title', ''),
+                                        'published_at': report.get('date', datetime.now()),
+                                        'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                        'url': report.get('link', ''),
+                                        'relevance_score': 0.8
+                                    })
+                                
+                                if news_list:
+                                    news_df = pd.DataFrame(news_list)
+                                    print(f"   ✅ {len(news_df)} haber KAP'tan alındı!")
+                                    return news_df
+                        except Exception as kap_error:
+                            print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                
+                # KAP da yoksa boş DataFrame döndür (dummy veri değil)
                 return pd.DataFrame(columns=['title', 'summary', 'content', 'published_at', 'source', 'url', 'relevance_score'])
             else:
                 print(f"⚠️  NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")
@@ -302,15 +386,30 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         # Gemini API'yi bir kez configure et (eğer mevcut ve kullanılacaksa)
         gemini_model = None
+        gemini_working = False
         if GEMINI_AVAILABLE:
             gemini_api_key = os.getenv('GEMINI_API_KEY')
             if gemini_api_key:
                 try:
                     genai.configure(api_key=gemini_api_key)
                     gemini_model = genai.GenerativeModel('gemini-pro')
-                    print("🤖 Gemini API relevance kontrolü için hazır.")
+                    # Gemini API'nin çalıştığını test et
+                    try:
+                        test_response = gemini_model.generate_content("Test: Sayı 1")
+                        if test_response and test_response.text:
+                            gemini_working = True
+                            print("✅ Gemini API çalışıyor ve hazır (relevance kontrolü için).")
+                        else:
+                            print("⚠️  Gemini API yanıt vermedi (test başarısız).")
+                    except Exception as test_error:
+                        print(f"⚠️  Gemini API test hatası: {test_error}")
+                        print("   Relevance kontrolü Gemini olmadan yapılacak.")
                 except Exception as e:
                     print(f"⚠️  Gemini API yapılandırılamadı: {e}")
+            else:
+                print("ℹ️  GEMINI_API_KEY bulunamadı. Relevance kontrolü basit yöntemle yapılacak.")
+        else:
+            print("ℹ️  Gemini API yüklü değil. Relevance kontrolü basit yöntemle yapılacak.")
         
         # Her bir article'ı güvenli şekilde işle
         for article in articles:
@@ -370,7 +469,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 # Bu sayede sadece alakalı ve finansal etkisi olan haberler seçilir
                 gemini_relevance_score = None
                 financial_impact_score = None
-                if gemini_model:
+                if gemini_model and gemini_working:
                     try:
                         # Haber metnini hazırla (daha fazla içerik)
                         news_text = f"{title}\n\n{summary}\n\n{content[:800]}"  # İlk 800 karakter
@@ -516,22 +615,105 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
         
     except requests.exceptions.RequestException as e:
         print(f"❌ NewsAPI hatası: {e}")
+        error_code = None
+        error_message = None
+        
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_data = e.response.json()
-                print(f"   Hata detayı: {error_data.get('message', 'Bilinmeyen hata')}")
-                if error_data.get('code') == 'apiKeyInvalid':
+                error_message = error_data.get('message', 'Bilinmeyen hata')
+                error_code = error_data.get('code', 'unknown')
+                print(f"   Hata detayı: {error_message}")
+                if error_code == 'apiKeyInvalid':
                     print("   ⚠️  API key geçersiz! Lütfen .env dosyasındaki NEWS_API_KEY'i kontrol edin.")
-                elif error_data.get('code') == 'rateLimited':
+                elif error_code == 'rateLimited':
                     print("   ⚠️  API limiti aşıldı! Ücretsiz plan günde 100 istek sınırına sahip.")
             except:
                 pass
-        print("⚠️  Dummy veri kullanılıyor.")
+        
+        # NewsAPI başarısız olursa, KAP raporlarını kullan (Türk şirketleri için)
+        if ticker and (ticker.endswith('.IS') or len(ticker.replace('.IS', '')) == 5):
+            print("   🔄 NewsAPI başarısız, KAP raporları deneniyor...")
+            try:
+                from .kap_scraper import get_kap_financial_reports
+            except ImportError:
+                try:
+                    from src.kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    get_kap_financial_reports = None
+            
+            if get_kap_financial_reports:
+                try:
+                    ticker_clean = ticker.replace('.IS', '').upper()
+                    kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                    
+                    if kap_reports and len(kap_reports) > 0:
+                        print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                        # KAP raporlarını haber formatına çevir
+                        news_list = []
+                        for report in kap_reports:
+                            news_list.append({
+                                'title': report.get('title', 'KAP Bildirimi'),
+                                'summary': report.get('title', ''),
+                                'content': report.get('title', ''),
+                                'published_at': report.get('date', datetime.now()),
+                                'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                'url': report.get('link', ''),
+                                'relevance_score': 0.8  # KAP raporları yüksek relevans
+                            })
+                        
+                        if news_list:
+                            news_df = pd.DataFrame(news_list)
+                            print(f"   ✅ {len(news_df)} haber KAP'tan alındı!")
+                            return news_df
+                except Exception as kap_error:
+                    print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+        
+        # KAP da başarısız olursa dummy veri
+        print("⚠️  NewsAPI ve KAP başarısız, dummy veri kullanılıyor.")
         return _get_dummy_news(company_name, days_back)
     except Exception as e:
         print(f"❌ Beklenmeyen hata: {e}")
         import traceback
         traceback.print_exc()
+        
+        # NewsAPI başarısız olursa, KAP raporlarını kullan (Türk şirketleri için)
+        if ticker and (ticker.endswith('.IS') or len(ticker.replace('.IS', '')) == 5):
+            print("   🔄 KAP raporları deneniyor...")
+            try:
+                from .kap_scraper import get_kap_financial_reports
+            except ImportError:
+                try:
+                    from src.kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    get_kap_financial_reports = None
+            
+            if get_kap_financial_reports:
+                try:
+                    ticker_clean = ticker.replace('.IS', '').upper()
+                    kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                    
+                    if kap_reports and len(kap_reports) > 0:
+                        print(f"   ✅ {len(kap_reports)} KAP raporu bulundu!")
+                        # KAP raporlarını haber formatına çevir
+                        news_list = []
+                        for report in kap_reports:
+                            news_list.append({
+                                'title': report.get('title', 'KAP Bildirimi'),
+                                'summary': report.get('title', ''),
+                                'content': report.get('title', ''),
+                                'published_at': report.get('date', datetime.now()),
+                                'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                'url': report.get('link', ''),
+                                'relevance_score': 0.8
+                            })
+                        
+                        if news_list:
+                            news_df = pd.DataFrame(news_list)
+                            return news_df
+                except Exception as kap_error:
+                    print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+        
         print("⚠️  Dummy veri kullanılıyor.")
         return _get_dummy_news(company_name, days_back)
 

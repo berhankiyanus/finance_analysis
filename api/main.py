@@ -147,8 +147,23 @@ async def predict_direction(request: PredictionRequest):
         # 2. Feature'ları hesapla
         try:
             price_df_with_features = compute_features(price_df)
+            if price_df_with_features.empty:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Feature hesaplama sonrası DataFrame boş."
+                )
             feature_vector = create_feature_vector(price_df_with_features)
+            if not feature_vector:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Feature vektörü oluşturulamadı (boş)."
+                )
+        except HTTPException:
+            raise
         except Exception as e:
+            import traceback
+            error_detail = f"Feature hesaplama hatası: {str(e)}\n{traceback.format_exc()}"
+            print(f"❌ {error_detail}")  # Console'a yazdır
             raise HTTPException(
                 status_code=500,
                 detail=f"Feature hesaplama hatası: {str(e)}"
@@ -156,57 +171,104 @@ async def predict_direction(request: PredictionRequest):
         
         # 3. Model tahmini (eğer isteniyorsa)
         if request.use_model:
-            model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
-            
-            if os.path.exists(model_path):
+            # Önce demo_model'i dene (startup'ta yüklenmişse)
+            predictor = None
+            prediction = None
+            if demo_model is not None:
                 try:
-                    predictor = PriceDirectionPredictor(model_path=model_path)
+                    predictor = demo_model
                     prediction = predictor.predict(feature_vector)
-                    
-                    direction = prediction.get('direction', 'neutral')
-                    confidence = prediction.get('confidence', 0.5)
-                    probabilities = prediction.get('probabilities', {})
-                    
-                    # Sinyal belirleme
-                    if direction == 'up':
-                        tahmin_sinyal = 'AL'
-                    elif direction == 'down':
-                        tahmin_sinyal = 'SAT'
-                    else:
-                        tahmin_sinyal = 'TUT'
-                    
-                    # Güven seviyesi
-                    if confidence >= 0.7:
-                        guven = 'Yüksek'
-                    elif confidence >= 0.5:
-                        guven = 'Orta'
-                    else:
-                        guven = 'Düşük'
-                    
-                    # Skor (confidence'den türet)
-                    skor = confidence * 100
-                    
-                    return PredictionResponse(
-                        hisse_kodu=ticker,
-                        tahmin_sinyal=tahmin_sinyal,
-                        skor=skor,
-                        guven=guven,
-                        confidence=confidence,
-                        direction=direction,
-                        probabilities=probabilities,
-                        feature_vector=feature_vector,
-                        message=f"Model tahmini: {direction} (güven: {confidence:.1%})"
-                    )
-                    
+                    print(f"✅ Demo model tahmini başarılı: {prediction}")
                 except Exception as e:
-                    # Model hatası - rule-based fallback
-                    return _rule_based_prediction(ticker, feature_vector, str(e))
-            else:
-                # Model yok - rule-based fallback
-                return _rule_based_prediction(
-                    ticker, 
-                    feature_vector, 
-                    f"Model bulunamadı: {model_path}. Model eğitmek için: python train_model.py {ticker} --period 2y"
+                    import traceback
+                    print(f"⚠️  Demo model hatası: {e}\n{traceback.format_exc()}")
+                    predictor = None
+                    prediction = None
+            
+            # Demo model çalışmadıysa, ticker'a özel modeli dene
+            if predictor is None:
+                model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
+                
+                if os.path.exists(model_path):
+                    try:
+                        predictor = PriceDirectionPredictor(model_path=model_path)
+                        prediction = predictor.predict(feature_vector)
+                        print(f"✅ Ticker model tahmini başarılı: {prediction}")
+                    except Exception as e:
+                        import traceback
+                        error_msg = f"Model hatası: {str(e)}\n{traceback.format_exc()}"
+                        print(f"❌ {error_msg}")
+                        # Model hatası - rule-based fallback
+                        return _rule_based_prediction(ticker, feature_vector, f"Model hatası: {str(e)}")
+                else:
+                    # Model yok - rule-based fallback
+                    return _rule_based_prediction(
+                        ticker, 
+                        feature_vector, 
+                        f"Model bulunamadı: {model_path}. Model eğitmek için: python train_model.py {ticker} --period 2y"
+                    )
+            
+            # Prediction başarılıysa devam et
+            if predictor is not None and prediction is not None:
+                # Numpy tiplerini Python native tiplerine çevir
+                direction_raw = prediction.get('direction', 'neutral')
+                direction = str(direction_raw) if direction_raw is not None else 'neutral'
+                
+                confidence_raw = prediction.get('confidence', 0.5)
+                confidence = float(confidence_raw) if confidence_raw is not None else 0.5
+                
+                probabilities_raw = prediction.get('probabilities', {})
+                # Probabilities dictionary'sindeki key'leri ve value'ları Python native yap
+                probabilities = {}
+                if probabilities_raw:
+                    for key, value in probabilities_raw.items():
+                        key_str = str(key)  # numpy string'i normal string'e çevir
+                        value_float = float(value)  # numpy float'ı normal float'a çevir
+                        probabilities[key_str] = value_float
+                
+                # Sinyal belirleme
+                if direction == 'up':
+                    tahmin_sinyal = 'AL'
+                elif direction == 'down':
+                    tahmin_sinyal = 'SAT'
+                else:
+                    tahmin_sinyal = 'TUT'
+                
+                # Güven seviyesi
+                if confidence >= 0.7:
+                    guven = 'Yüksek'
+                elif confidence >= 0.5:
+                    guven = 'Orta'
+                else:
+                    guven = 'Düşük'
+                
+                # Skor (confidence'den türet)
+                skor = float(confidence * 100)
+                
+                # Feature vector'daki numpy tiplerini de temizle
+                feature_vector_clean = {}
+                if feature_vector:
+                    import numpy as np
+                    for key, value in feature_vector.items():
+                        if isinstance(value, (np.integer, np.int64, np.int32)):
+                            feature_vector_clean[key] = int(value)
+                        elif isinstance(value, (np.floating, np.float64, np.float32)):
+                            feature_vector_clean[key] = float(value)
+                        elif isinstance(value, np.str_):
+                            feature_vector_clean[key] = str(value)
+                        else:
+                            feature_vector_clean[key] = value
+                
+                return PredictionResponse(
+                    hisse_kodu=ticker,
+                    tahmin_sinyal=tahmin_sinyal,
+                    skor=skor,
+                    guven=guven,
+                    confidence=confidence,
+                    direction=direction,
+                    probabilities=probabilities,
+                    feature_vector=feature_vector_clean,
+                    message=f"Model tahmini: {direction} (güven: {confidence:.1%})"
                 )
         else:
             # Model kullanılmayacak - rule-based
@@ -215,6 +277,10 @@ async def predict_direction(request: PredictionRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        error_detail = f"Tahmin yapılırken hata: {str(e)}\n\nTraceback:\n{error_trace}"
+        print(f"❌ API HATASI:\n{error_detail}")  # Console'a yazdır
         raise HTTPException(
             status_code=500,
             detail=f"Tahmin yapılırken hata: {str(e)}"
