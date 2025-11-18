@@ -50,7 +50,14 @@ pip install fastapi "uvicorn[standard]"
 
 ### 2. Streamlit'i Başlat (başka bir terminal)
 
-**Önerilen Yöntem (Heredoc ile Python kodu - EN GÜVENİLİR):**
+**EN KOLAY YÖNTEM (venv aktifken):**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate  # veya: source venv/bin/activate
+streamlit run app.py
+```
+
+**Alternatif: Heredoc ile Python kodu (venv aktif değilse):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 /opt/homebrew/opt/python@3.14/bin/python3.14 << 'PYEOF'
@@ -70,19 +77,10 @@ PYEOF
 
 **⚠️ ÖNEMLİ:** `sys.path.insert`'i `import os` ve `from streamlit`'ten ÖNCE yapın!
 
-**Avantaj:** Heredoc kullanımı tırnak sorunlarını önler ve daha okunabilirdir.
-
 **Alternatif: Script ile:**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
 bash BASLAT_STREAMLIT_DIRECT.sh
-```
-
-**Alternatif 1 (activate çalışıyorsa):**
-```bash
-cd /Users/berhankiyanus/Desktop/Finance
-. venv/bin/activate
-streamlit run app.py
 ```
 
 **Alternatif 2 (venv/bin/python3 çalışıyorsa):**
