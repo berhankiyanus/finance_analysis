@@ -10,7 +10,9 @@ import pandas as pd
 from typing import Optional, Tuple
 from datetime import datetime
 
+# Import mekanizması - Streamlit Cloud için güvenli import
 try:
+    # Önce relative import dene (paket içinden çalışıyorsa)
     from .data_collection import get_news, get_price_data, get_fundamentals
     from .macro_data import get_macroeconomic_data
     from .sentiment_analysis import (
@@ -28,24 +30,95 @@ try:
         generate_detailed_report,
         predict_direction
     )
-except ImportError:
-    from src.data_collection import get_news, get_price_data, get_fundamentals
-    from src.macro_data import get_macroeconomic_data
-    from src.sentiment_analysis import (
-        SentimentAnalyzer, 
-        analyze_news_sentiment, 
-        aggregate_sentiment,
-        analyze_stock_news,
-        analyze_market_news
-    )
-    from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
-    from src.scoring import (
-        compute_overall_score,
-        interpret_score,
-        generate_turkish_summary,
-        generate_detailed_report,
-        predict_direction
-    )
+except (ImportError, ValueError, SystemError):
+    # Relative import başarısız oldu, absolute import dene
+    try:
+        from src.data_collection import get_news, get_price_data, get_fundamentals
+        from src.macro_data import get_macroeconomic_data
+        from src.sentiment_analysis import (
+            SentimentAnalyzer, 
+            analyze_news_sentiment, 
+            aggregate_sentiment,
+            analyze_stock_news,
+            analyze_market_news
+        )
+        from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
+        from src.scoring import (
+            compute_overall_score,
+            interpret_score,
+            generate_turkish_summary,
+            generate_detailed_report,
+            predict_direction
+        )
+    except ImportError as e:
+        # Son çare: importlib ile doğrudan dosya import'u
+        import importlib.util
+        from pathlib import Path
+        
+        # Proje kök dizinini bul
+        current_file = Path(__file__).resolve()
+        src_dir = current_file.parent
+        project_root = src_dir.parent
+        
+        # sys.path'e ekle
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        
+        # Modülleri import et
+        try:
+            data_collection_spec = importlib.util.spec_from_file_location(
+                "src.data_collection", 
+                src_dir / "data_collection.py"
+            )
+            data_collection_module = importlib.util.module_from_spec(data_collection_spec)
+            data_collection_spec.loader.exec_module(data_collection_module)
+            get_news = data_collection_module.get_news
+            get_price_data = data_collection_module.get_price_data
+            get_fundamentals = data_collection_module.get_fundamentals
+            
+            macro_data_spec = importlib.util.spec_from_file_location(
+                "src.macro_data",
+                src_dir / "macro_data.py"
+            )
+            macro_data_module = importlib.util.module_from_spec(macro_data_spec)
+            macro_data_spec.loader.exec_module(macro_data_module)
+            get_macroeconomic_data = macro_data_module.get_macroeconomic_data
+            
+            sentiment_analysis_spec = importlib.util.spec_from_file_location(
+                "src.sentiment_analysis",
+                src_dir / "sentiment_analysis.py"
+            )
+            sentiment_analysis_module = importlib.util.module_from_spec(sentiment_analysis_spec)
+            sentiment_analysis_spec.loader.exec_module(sentiment_analysis_module)
+            SentimentAnalyzer = sentiment_analysis_module.SentimentAnalyzer
+            analyze_news_sentiment = sentiment_analysis_module.analyze_news_sentiment
+            aggregate_sentiment = sentiment_analysis_module.aggregate_sentiment
+            analyze_stock_news = sentiment_analysis_module.analyze_stock_news
+            analyze_market_news = sentiment_analysis_module.analyze_market_news
+            
+            financial_analysis_spec = importlib.util.spec_from_file_location(
+                "src.financial_analysis",
+                src_dir / "financial_analysis.py"
+            )
+            financial_analysis_module = importlib.util.module_from_spec(financial_analysis_spec)
+            financial_analysis_spec.loader.exec_module(financial_analysis_module)
+            compute_features = financial_analysis_module.compute_features
+            create_feature_vector = financial_analysis_module.create_feature_vector
+            compute_financial_score = financial_analysis_module.compute_financial_score
+            
+            scoring_spec = importlib.util.spec_from_file_location(
+                "src.scoring",
+                src_dir / "scoring.py"
+            )
+            scoring_module = importlib.util.module_from_spec(scoring_spec)
+            scoring_spec.loader.exec_module(scoring_module)
+            compute_overall_score = scoring_module.compute_overall_score
+            interpret_score = scoring_module.interpret_score
+            generate_turkish_summary = scoring_module.generate_turkish_summary
+            generate_detailed_report = scoring_module.generate_detailed_report
+            predict_direction = scoring_module.predict_direction
+        except Exception as import_error:
+            raise ImportError(f"Modüller import edilemedi: {import_error}. Orijinal hata: {e}")
 
 
 def analyze_company(
