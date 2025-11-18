@@ -695,303 +695,303 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 
                                 # Tab'lar oluştur
                                 tab1, tab2, tab3, tab4 = st.tabs(["📊 Fiyat Grafiği", "🕯️ Candlestick", "📈 Teknik Göstergeler", "📰 Haber Analizi"])
-                            
-                            with tab1:
-                                # Gelişmiş fiyat grafiği
-                                fig = make_subplots(
-                                    rows=3, cols=1,
-                                    subplot_titles=('Fiyat Hareketi', 'Hacim', 'RSI (14)'),
-                                    vertical_spacing=0.08,
-                                    row_heights=[0.5, 0.25, 0.25],
-                                    shared_xaxes=True
-                                )
                                 
-                                # Fiyat çizgisi
-                                fig.add_trace(
-                                    go.Scatter(
-                                        x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                        y=price_df['close'],
-                                        mode='lines',
-                                        name='Kapanış Fiyatı',
-                                        line=dict(color='#1f77b4', width=2),
-                                        hovertemplate='<b>%{fullData.name}</b><br>' +
-                                                      'Tarih: %{x}<br>' +
-                                                      'Fiyat: $%{y:.2f}<br>' +
-                                                      '<extra></extra>'
-                                    ),
-                                    row=1, col=1
-                                )
-                                
-                                # Hareketli ortalamalar
-                                if 'ma_20' in price_df.columns:
+                                with tab1:
+                                    # Gelişmiş fiyat grafiği
+                                    fig = make_subplots(
+                                        rows=3, cols=1,
+                                        subplot_titles=('Fiyat Hareketi', 'Hacim', 'RSI (14)'),
+                                        vertical_spacing=0.08,
+                                        row_heights=[0.5, 0.25, 0.25],
+                                        shared_xaxes=True
+                                    )
+                                    
+                                    # Fiyat çizgisi
                                     fig.add_trace(
                                         go.Scatter(
                                             x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                            y=price_df['ma_20'],
+                                            y=price_df['close'],
                                             mode='lines',
-                                            name='MA 20',
-                                            line=dict(color='orange', width=1.5, dash='dash'),
-                                            hovertemplate='<b>MA 20</b><br>Fiyat: $%{y:.2f}<extra></extra>'
+                                            name='Kapanış Fiyatı',
+                                            line=dict(color='#1f77b4', width=2),
+                                            hovertemplate='<b>%{fullData.name}</b><br>' +
+                                                          'Tarih: %{x}<br>' +
+                                                          'Fiyat: $%{y:.2f}<br>' +
+                                                          '<extra></extra>'
                                         ),
                                         row=1, col=1
                                     )
-                                
-                                if 'ma_50' in price_df.columns:
-                                    fig.add_trace(
-                                        go.Scatter(
-                                            x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                            y=price_df['ma_50'],
-                                            mode='lines',
-                                            name='MA 50',
-                                            line=dict(color='purple', width=1.5, dash='dot'),
-                                            hovertemplate='<b>MA 50</b><br>Fiyat: $%{y:.2f}<extra></extra>'
-                                        ),
-                                        row=1, col=1
-                                    )
-                                
-                                # Hacim
-                                fig.add_trace(
-                                    go.Bar(
-                                        x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                        y=price_df['volume'],
-                                        name='Hacim',
-                                        marker_color='lightblue',
-                                        hovertemplate='<b>Hacim</b><br>%{y:,.0f}<extra></extra>'
-                                    ),
-                                    row=2, col=1
-                                )
-                                
-                                # RSI
-                                if 'rsi_14' in price_df.columns:
-                                    fig.add_trace(
-                                        go.Scatter(
-                                            x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                            y=price_df['rsi_14'],
-                                            mode='lines',
-                                            name='RSI (14)',
-                                            line=dict(color='red', width=2),
-                                            hovertemplate='<b>RSI</b><br>%{y:.2f}<extra></extra>'
-                                        ),
-                                        row=3, col=1
-                                    )
                                     
-                                    # RSI seviyeleri (70 ve 30)
-                                    fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
-                                    fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
-                                
-                                fig.update_layout(
-                                    title=f'{company_name} ({ticker}) - Detaylı Fiyat Analizi',
-                                    height=800,
-                                    showlegend=True,
-                                    hovermode='x unified',
-                                    xaxis_rangeslider_visible=False
-                                )
-                                
-                                fig.update_xaxes(title_text="Tarih", row=3, col=1)
-                                fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
-                                fig.update_yaxes(title_text="Hacim", row=2, col=1)
-                                fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
-                                
-                                st.plotly_chart(fig, use_container_width=True, config={
-                                    'displayModeBar': True,
-                                    'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
-                                })
-                            
-                            with tab2:
-                                # Candlestick grafiği
-                                if all(col in price_df.columns for col in ['open', 'high', 'low', 'close']):
-                                    fig_candle = go.Figure(data=[go.Candlestick(
-                                        x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                        open=price_df['open'],
-                                        high=price_df['high'],
-                                        low=price_df['low'],
-                                        close=price_df['close'],
-                                        name='Fiyat',
-                                        increasing_line_color='green',
-                                        decreasing_line_color='red'
-                                    )])
-                                    
-                                    # Hareketli ortalamalar ekle
+                                    # Hareketli ortalamalar
                                     if 'ma_20' in price_df.columns:
-                                        fig_candle.add_trace(
+                                        fig.add_trace(
                                             go.Scatter(
                                                 x=price_df.index if 'date' not in price_df.columns else price_df['date'],
                                                 y=price_df['ma_20'],
                                                 mode='lines',
                                                 name='MA 20',
-                                                line=dict(color='orange', width=1.5)
-                                            )
+                                                line=dict(color='orange', width=1.5, dash='dash'),
+                                                hovertemplate='<b>MA 20</b><br>Fiyat: $%{y:.2f}<extra></extra>'
+                                            ),
+                                            row=1, col=1
                                         )
                                     
-                                    fig_candle.update_layout(
-                                        title=f'{company_name} ({ticker}) - Candlestick Grafiği',
-                                        height=600,
-                                        xaxis_rangeslider_visible=True,
-                                        xaxis_rangeslider_thickness=0.05,
-                                        hovermode='x unified'
+                                    if 'ma_50' in price_df.columns:
+                                        fig.add_trace(
+                                            go.Scatter(
+                                                x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                                y=price_df['ma_50'],
+                                                mode='lines',
+                                                name='MA 50',
+                                                line=dict(color='purple', width=1.5, dash='dot'),
+                                                hovertemplate='<b>MA 50</b><br>Fiyat: $%{y:.2f}<extra></extra>'
+                                            ),
+                                            row=1, col=1
+                                        )
+                                    
+                                    # Hacim
+                                    fig.add_trace(
+                                        go.Bar(
+                                            x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                            y=price_df['volume'],
+                                            name='Hacim',
+                                            marker_color='lightblue',
+                                            hovertemplate='<b>Hacim</b><br>%{y:,.0f}<extra></extra>'
+                                        ),
+                                        row=2, col=1
                                     )
                                     
-                                    fig_candle.update_xaxes(title_text="Tarih")
-                                    fig_candle.update_yaxes(title_text="Fiyat ($)")
+                                    # RSI
+                                    if 'rsi_14' in price_df.columns:
+                                        fig.add_trace(
+                                            go.Scatter(
+                                                x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                                y=price_df['rsi_14'],
+                                                mode='lines',
+                                                name='RSI (14)',
+                                                line=dict(color='red', width=2),
+                                                hovertemplate='<b>RSI</b><br>%{y:.2f}<extra></extra>'
+                                            ),
+                                            row=3, col=1
+                                        )
+                                        
+                                        # RSI seviyeleri (70 ve 30)
+                                        fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
+                                        fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
                                     
-                                    st.plotly_chart(fig_candle, use_container_width=True, config={
+                                    fig.update_layout(
+                                        title=f'{company_name} ({ticker}) - Detaylı Fiyat Analizi',
+                                        height=800,
+                                        showlegend=True,
+                                        hovermode='x unified',
+                                        xaxis_rangeslider_visible=False
+                                    )
+                                    
+                                    fig.update_xaxes(title_text="Tarih", row=3, col=1)
+                                    fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
+                                    fig.update_yaxes(title_text="Hacim", row=2, col=1)
+                                    fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
+                                    
+                                    st.plotly_chart(fig, use_container_width=True, config={
                                         'displayModeBar': True,
                                         'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
                                     })
-                                else:
-                                    st.info("Candlestick grafiği için OHLC verisi gerekli.")
-                            
-                            with tab3:
-                                # Teknik göstergeler
-                                tech_fig = make_subplots(
-                                    rows=2, cols=2,
-                                    subplot_titles=('MACD', 'RSI', 'Bollinger Bands', 'Volatilite'),
-                                    specs=[[{"secondary_y": False}, {"secondary_y": False}],
-                                           [{"secondary_y": False}, {"secondary_y": False}]]
-                                )
                                 
-                                date_col = price_df.index if 'date' not in price_df.columns else price_df['date']
+                                with tab2:
+                                    # Candlestick grafiği
+                                    if all(col in price_df.columns for col in ['open', 'high', 'low', 'close']):
+                                        fig_candle = go.Figure(data=[go.Candlestick(
+                                            x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                            open=price_df['open'],
+                                            high=price_df['high'],
+                                            low=price_df['low'],
+                                            close=price_df['close'],
+                                            name='Fiyat',
+                                            increasing_line_color='green',
+                                            decreasing_line_color='red'
+                                        )])
+                                        
+                                        # Hareketli ortalamalar ekle
+                                        if 'ma_20' in price_df.columns:
+                                            fig_candle.add_trace(
+                                                go.Scatter(
+                                                    x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                                    y=price_df['ma_20'],
+                                                    mode='lines',
+                                                    name='MA 20',
+                                                    line=dict(color='orange', width=1.5)
+                                                )
+                                            )
+                                        
+                                        fig_candle.update_layout(
+                                            title=f'{company_name} ({ticker}) - Candlestick Grafiği',
+                                            height=600,
+                                            xaxis_rangeslider_visible=True,
+                                            xaxis_rangeslider_thickness=0.05,
+                                            hovermode='x unified'
+                                        )
+                                        
+                                        fig_candle.update_xaxes(title_text="Tarih")
+                                        fig_candle.update_yaxes(title_text="Fiyat ($)")
+                                        
+                                        st.plotly_chart(fig_candle, use_container_width=True, config={
+                                            'displayModeBar': True,
+                                            'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
+                                        })
+                                    else:
+                                        st.info("Candlestick grafiği için OHLC verisi gerekli.")
                                 
-                                # MACD
-                                if all(col in price_df.columns for col in ['macd', 'macd_signal']):
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['macd'], name='MACD', line=dict(color='blue')),
-                                        row=1, col=1
+                                with tab3:
+                                    # Teknik göstergeler
+                                    tech_fig = make_subplots(
+                                        rows=2, cols=2,
+                                        subplot_titles=('MACD', 'RSI', 'Bollinger Bands', 'Volatilite'),
+                                        specs=[[{"secondary_y": False}, {"secondary_y": False}],
+                                               [{"secondary_y": False}, {"secondary_y": False}]]
                                     )
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['macd_signal'], name='Signal', line=dict(color='red')),
-                                        row=1, col=1
-                                    )
-                                    if 'macd_hist' in price_df.columns:
+                                    
+                                    date_col = price_df.index if 'date' not in price_df.columns else price_df['date']
+                                    
+                                    # MACD
+                                    if all(col in price_df.columns for col in ['macd', 'macd_signal']):
                                         tech_fig.add_trace(
-                                            go.Bar(x=date_col, y=price_df['macd_hist'], name='Histogram', marker_color='gray'),
+                                            go.Scatter(x=date_col, y=price_df['macd'], name='MACD', line=dict(color='blue')),
                                             row=1, col=1
                                         )
-                                
-                                # RSI
-                                if 'rsi_14' in price_df.columns:
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['rsi_14'], name='RSI', line=dict(color='purple')),
-                                        row=1, col=2
-                                    )
-                                    tech_fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=1, col=2)
-                                    tech_fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=1, col=2)
-                                
-                                # Bollinger Bands
-                                if all(col in price_df.columns for col in ['bb_upper', 'bb_lower', 'bb_middle']):
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['bb_upper'], name='BB Upper', line=dict(color='gray', dash='dash')),
-                                        row=2, col=1
-                                    )
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['bb_lower'], name='BB Lower', line=dict(color='gray', dash='dash'), fill='tonexty'),
-                                        row=2, col=1
-                                    )
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['bb_middle'], name='BB Middle', line=dict(color='blue')),
-                                        row=2, col=1
-                                    )
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['close'], name='Fiyat', line=dict(color='black')),
-                                        row=2, col=1
-                                    )
-                                
-                                # Volatilite
-                                if 'volatility_30d' in price_df.columns:
-                                    tech_fig.add_trace(
-                                        go.Scatter(x=date_col, y=price_df['volatility_30d'], name='Volatilite', line=dict(color='orange'), fill='tozeroy'),
-                                        row=2, col=2
-                                    )
-                                
-                                tech_fig.update_layout(
-                                    title='Teknik Göstergeler',
-                                    height=700,
-                                    showlegend=True,
-                                    hovermode='x unified'
-                                )
-                                
-                                st.plotly_chart(tech_fig, use_container_width=True, config={
-                                    'displayModeBar': True,
-                                    'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
-                                })
-                            
-                            with tab4:
-                                # Haber analizi grafikleri
-                                if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
-                                    news_df = results['news_df']
-                                    
-                                    col_news1, col_news2 = st.columns(2)
-                                    
-                                    with col_news1:
-                                        # Sentiment dağılımı
-                                        sentiment_counts = news_df['sentiment_class'].value_counts()
-                                        
-                                        fig_sentiment = go.Figure(data=[go.Bar(
-                                            x=sentiment_counts.index,
-                                            y=sentiment_counts.values,
-                                            marker_color=['green', 'red', 'gray'],
-                                            text=sentiment_counts.values,
-                                            textposition='auto',
-                                            hovertemplate='<b>%{x}</b><br>Haber Sayısı: %{y}<extra></extra>'
-                                        )])
-                                        
-                                        fig_sentiment.update_layout(
-                                            title='Haber Sentiment Dağılımı',
-                                            xaxis_title='Sentiment Sınıfı',
-                                            yaxis_title='Haber Sayısı',
-                                            height=300
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['macd_signal'], name='Signal', line=dict(color='red')),
+                                            row=1, col=1
                                         )
-                                        
-                                        st.plotly_chart(fig_sentiment, use_container_width=True)
+                                        if 'macd_hist' in price_df.columns:
+                                            tech_fig.add_trace(
+                                                go.Bar(x=date_col, y=price_df['macd_hist'], name='Histogram', marker_color='gray'),
+                                                row=1, col=1
+                                            )
                                     
-                                    with col_news2:
-                                        # Sentiment zaman serisi
-                                        if 'published_at' in news_df.columns:
-                                            news_df_time = news_df.copy()
-                                            news_df_time['date'] = pd.to_datetime(news_df_time['published_at']).dt.date
-                                            sentiment_timeseries = news_df_time.groupby(['date', 'sentiment_class']).size().unstack(fill_value=0)
+                                    # RSI
+                                    if 'rsi_14' in price_df.columns:
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['rsi_14'], name='RSI', line=dict(color='purple')),
+                                            row=1, col=2
+                                        )
+                                        tech_fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=1, col=2)
+                                        tech_fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=1, col=2)
+                                    
+                                    # Bollinger Bands
+                                    if all(col in price_df.columns for col in ['bb_upper', 'bb_lower', 'bb_middle']):
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['bb_upper'], name='BB Upper', line=dict(color='gray', dash='dash')),
+                                            row=2, col=1
+                                        )
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['bb_lower'], name='BB Lower', line=dict(color='gray', dash='dash'), fill='tonexty'),
+                                            row=2, col=1
+                                        )
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['bb_middle'], name='BB Middle', line=dict(color='blue')),
+                                            row=2, col=1
+                                        )
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['close'], name='Fiyat', line=dict(color='black')),
+                                            row=2, col=1
+                                        )
+                                    
+                                    # Volatilite
+                                    if 'volatility_30d' in price_df.columns:
+                                        tech_fig.add_trace(
+                                            go.Scatter(x=date_col, y=price_df['volatility_30d'], name='Volatilite', line=dict(color='orange'), fill='tozeroy'),
+                                            row=2, col=2
+                                        )
+                                    
+                                    tech_fig.update_layout(
+                                        title='Teknik Göstergeler',
+                                        height=700,
+                                        showlegend=True,
+                                        hovermode='x unified'
+                                    )
+                                    
+                                    st.plotly_chart(tech_fig, use_container_width=True, config={
+                                        'displayModeBar': True,
+                                        'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
+                                    })
+                                
+                                with tab4:
+                                    # Haber analizi grafikleri
+                                    if not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:
+                                        news_df = results['news_df']
+                                        
+                                        col_news1, col_news2 = st.columns(2)
+                                        
+                                        with col_news1:
+                                            # Sentiment dağılımı
+                                            sentiment_counts = news_df['sentiment_class'].value_counts()
                                             
-                                            fig_timeseries = go.Figure()
-                                            colors = {'positive': 'green', 'negative': 'red', 'neutral': 'gray'}
-                                            for sentiment in sentiment_timeseries.columns:
-                                                fig_timeseries.add_trace(go.Scatter(
-                                                    x=sentiment_timeseries.index,
-                                                    y=sentiment_timeseries[sentiment],
-                                                    mode='lines+markers',
-                                                    name=sentiment,
-                                                    line=dict(color=colors.get(sentiment, 'blue')),
-                                                    hovertemplate=f'<b>{sentiment}</b><br>%{{y}} haber<extra></extra>'
-                                                ))
+                                            fig_sentiment = go.Figure(data=[go.Bar(
+                                                x=sentiment_counts.index,
+                                                y=sentiment_counts.values,
+                                                marker_color=['green', 'red', 'gray'],
+                                                text=sentiment_counts.values,
+                                                textposition='auto',
+                                                hovertemplate='<b>%{x}</b><br>Haber Sayısı: %{y}<extra></extra>'
+                                            )])
                                             
-                                            fig_timeseries.update_layout(
-                                                title='Sentiment Zaman Serisi',
-                                                xaxis_title='Tarih',
+                                            fig_sentiment.update_layout(
+                                                title='Haber Sentiment Dağılımı',
+                                                xaxis_title='Sentiment Sınıfı',
                                                 yaxis_title='Haber Sayısı',
-                                                height=300,
-                                                hovermode='x unified'
+                                                height=300
                                             )
                                             
-                                            st.plotly_chart(fig_timeseries, use_container_width=True)
-                                    
-                                    # Confidence dağılımı
-                                    if 'sentiment_confidence' in news_df.columns:
-                                        fig_confidence = go.Figure(data=[go.Histogram(
-                                            x=news_df['sentiment_confidence'],
-                                            nbinsx=20,
-                                            marker_color='lightblue',
-                                            hovertemplate='<b>Güven Aralığı</b><br>%{x:.2f}<br>Haber Sayısı: %{y}<extra></extra>'
-                                        )])
+                                            st.plotly_chart(fig_sentiment, use_container_width=True)
                                         
-                                        fig_confidence.update_layout(
-                                            title='Sentiment Güven Dağılımı',
-                                            xaxis_title='Güven Skoru',
-                                            yaxis_title='Haber Sayısı',
-                                            height=300
-                                        )
+                                        with col_news2:
+                                            # Sentiment zaman serisi
+                                            if 'published_at' in news_df.columns:
+                                                news_df_time = news_df.copy()
+                                                news_df_time['date'] = pd.to_datetime(news_df_time['published_at']).dt.date
+                                                sentiment_timeseries = news_df_time.groupby(['date', 'sentiment_class']).size().unstack(fill_value=0)
+                                                
+                                                fig_timeseries = go.Figure()
+                                                colors = {'positive': 'green', 'negative': 'red', 'neutral': 'gray'}
+                                                for sentiment in sentiment_timeseries.columns:
+                                                    fig_timeseries.add_trace(go.Scatter(
+                                                        x=sentiment_timeseries.index,
+                                                        y=sentiment_timeseries[sentiment],
+                                                        mode='lines+markers',
+                                                        name=sentiment,
+                                                        line=dict(color=colors.get(sentiment, 'blue')),
+                                                        hovertemplate=f'<b>{sentiment}</b><br>%{{y}} haber<extra></extra>'
+                                                    ))
+                                                
+                                                fig_timeseries.update_layout(
+                                                    title='Sentiment Zaman Serisi',
+                                                    xaxis_title='Tarih',
+                                                    yaxis_title='Haber Sayısı',
+                                                    height=300,
+                                                    hovermode='x unified'
+                                                )
+                                                
+                                                st.plotly_chart(fig_timeseries, use_container_width=True)
                                         
-                                        st.plotly_chart(fig_confidence, use_container_width=True)
-                                else:
-                                    st.info("Haber analizi için veri bulunamadı.")
+                                        # Confidence dağılımı
+                                        if 'sentiment_confidence' in news_df.columns:
+                                            fig_confidence = go.Figure(data=[go.Histogram(
+                                                x=news_df['sentiment_confidence'],
+                                                nbinsx=20,
+                                                marker_color='lightblue',
+                                                hovertemplate='<b>Güven Aralığı</b><br>%{x:.2f}<br>Haber Sayısı: %{y}<extra></extra>'
+                                            )])
+                                            
+                                            fig_confidence.update_layout(
+                                                title='Sentiment Güven Dağılımı',
+                                                xaxis_title='Güven Skoru',
+                                                yaxis_title='Haber Sayısı',
+                                                height=300
+                                            )
+                                            
+                                            st.plotly_chart(fig_confidence, use_container_width=True)
+                                    else:
+                                        st.info("Haber analizi için veri bulunamadı.")
                         
                         # TAB 3: Haberler & Rapor
                         with tab_news_report:
