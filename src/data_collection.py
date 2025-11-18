@@ -293,20 +293,20 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         search_terms_ordered = priority_terms + other_terms
         
         for search_term in search_terms_ordered:
-        params = {
+            params = {
                 'q': search_term,
-            'from': start_date.strftime('%Y-%m-%d'),
-            'to': end_date.strftime('%Y-%m-%d'),
-            'sortBy': 'publishedAt',
-            'pageSize': 100,
-            'apiKey': api_key
-        }
-        
+                'from': start_date.strftime('%Y-%m-%d'),
+                'to': end_date.strftime('%Y-%m-%d'),
+                'sortBy': 'publishedAt',
+                'pageSize': 100,
+                'apiKey': api_key
+            }
+            
             try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
                 # API yanıtını kontrol et
                 api_status = data.get('status', 'unknown')
                 if api_status != 'ok':
@@ -422,7 +422,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             if kap_reports and len(kap_reports) > 0:
                                 print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
                                 # KAP raporlarını haber formatına çevir
-        news_list = []
+                                news_list = []
                                 for report in kap_reports:
                                     news_list.append({
                                         'title': report.get('title', 'KAP Bildirimi'),
@@ -626,11 +626,11 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                     if relevance_score < 0.4:
                         continue  # Alakasız haberi atla
                 
-            news_list.append({
+                news_list.append({
                     'title': title,
                     'summary': summary,
                     'content': content,
-                'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
+                    'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
                     'source': article.get('source', {}).get('name', 'Unknown') if isinstance(article.get('source'), dict) else 'Unknown',
                     'url': article.get('url', '').strip() if article.get('url') else '',
                     'relevance_score': relevance_score

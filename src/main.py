@@ -11,46 +11,49 @@ from typing import Optional, Tuple
 from datetime import datetime
 
 # Import mekanizması - Streamlit Cloud için güvenli import
+# ÖNEMLİ: Streamlit Cloud'da relative import (from .module) çalışmaz
+# Bu yüzden önce absolute import (from src.module) deniyoruz
+
 try:
-    # Önce relative import dene (paket içinden çalışıyorsa)
-    from .data_collection import get_news, get_price_data, get_fundamentals
-    from .macro_data import get_macroeconomic_data
-    from .sentiment_analysis import (
+    # Önce absolute import dene (Streamlit Cloud için)
+    from src.data_collection import get_news, get_price_data, get_fundamentals
+    from src.macro_data import get_macroeconomic_data
+    from src.sentiment_analysis import (
         SentimentAnalyzer, 
         analyze_news_sentiment, 
         aggregate_sentiment,
         analyze_stock_news,
         analyze_market_news
     )
-    from .financial_analysis import compute_features, create_feature_vector, compute_financial_score
-    from .scoring import (
+    from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
+    from src.scoring import (
         compute_overall_score,
         interpret_score,
         generate_turkish_summary,
         generate_detailed_report,
         predict_direction
     )
-except (ImportError, ValueError, SystemError):
-    # Relative import başarısız oldu, absolute import dene
+except ImportError:
+    # Absolute import başarısız oldu, relative import dene (paket içinden çalışıyorsa)
     try:
-        from src.data_collection import get_news, get_price_data, get_fundamentals
-        from src.macro_data import get_macroeconomic_data
-        from src.sentiment_analysis import (
+        from .data_collection import get_news, get_price_data, get_fundamentals
+        from .macro_data import get_macroeconomic_data
+        from .sentiment_analysis import (
             SentimentAnalyzer, 
             analyze_news_sentiment, 
             aggregate_sentiment,
             analyze_stock_news,
             analyze_market_news
         )
-        from src.financial_analysis import compute_features, create_feature_vector, compute_financial_score
-        from src.scoring import (
+        from .financial_analysis import compute_features, create_feature_vector, compute_financial_score
+        from .scoring import (
             compute_overall_score,
             interpret_score,
             generate_turkish_summary,
             generate_detailed_report,
             predict_direction
         )
-    except ImportError as e:
+    except (ImportError, ValueError, SystemError) as e:
         # Son çare: importlib ile doğrudan dosya import'u
         import importlib.util
         from pathlib import Path
