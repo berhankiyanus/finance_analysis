@@ -50,10 +50,16 @@ pip install fastapi "uvicorn[standard]"
 
 ### 2. Streamlit'i Başlat (başka bir terminal)
 
-**Önerilen Yöntem (PYTHONPATH ile - İzin sorunlarını atlar):**
+**Önerilen Yöntem (Python script ile - EN GÜVENİLİR):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-PYTHONPATH=/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
+/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
+```
+
+**Alternatif: Script ile:**
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+bash BASLAT_STREAMLIT_DIRECT.sh
 ```
 
 **Alternatif 1 (activate çalışıyorsa):**
@@ -122,16 +128,16 @@ venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 **Neden?** `venv/bin/python3 -m uvicorn` doğrudan Python modülü olarak çalıştırır ve izin sorunlarını atlar.
 
-### "python3: realpath: venv/bin/: Operation not permitted" Hatası (Streamlit)
+### "python3: realpath: venv/bin/: Operation not permitted" veya "error evaluating path" Hatası (Streamlit)
 
-Bu durumda **PYTHONPATH ile tam yol kullanın**:
+Bu durumda **Python script kullanın** (EN GÜVENİLİR ÇÖZÜM):
 
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-PYTHONPATH=/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
+/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
 ```
 
-**Neden?** macOS Gatekeeper venv/bin/python3'e erişimi engelliyor. Tam Python yolunu ve PYTHONPATH kullanarak venv paketlerine erişebiliriz.
+**Neden?** macOS Gatekeeper ve Python path sorunları nedeniyle `venv/bin/python3` veya `-m streamlit` çalışmıyor. `streamlit_start.py` script'i Python path'ini düzgün ayarlayarak streamlit'i başlatır.
 
 ### "command not found: uvicorn" Hatası
 

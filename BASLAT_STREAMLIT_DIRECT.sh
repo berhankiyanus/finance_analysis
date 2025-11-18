@@ -24,6 +24,6 @@ echo ""
 echo "⚠️  Durdurmak için: Ctrl+C"
 echo ""
 
-# Python modülü olarak çalıştır (PYTHONPATH ile izin sorunlarını atlar)
-PYTHONPATH="/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH" /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
+# Python script ile çalıştır (Python path sorunlarını çözer)
+/opt/homebrew/opt/python@3.14/bin/python3.14 streamlit_start.py
 
