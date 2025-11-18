@@ -55,14 +55,20 @@ pip install fastapi "uvicorn[standard]"
 cd /Users/berhankiyanus/Desktop/Finance
 /opt/homebrew/opt/python@3.14/bin/python3.14 << 'PYEOF'
 import sys
-sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages")
 import os
-os.chdir("/Users/berhankiyanus/Desktop/Finance")
+# Path'i en başta ekle
+sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages")
+# Streamlit'i import et (path eklendikten hemen sonra)
 from streamlit.web.cli import main
+# Çalışma dizinini ayarla (import'tan sonra)
+os.chdir("/Users/berhankiyanus/Desktop/Finance")
+# Streamlit'i başlat
 sys.argv = ["streamlit", "run", "app.py"]
 main()
 PYEOF
 ```
+
+**⚠️ ÖNEMLİ:** `sys.path.insert`'i `import os` ve `from streamlit`'ten ÖNCE yapın!
 
 **Avantaj:** Heredoc kullanımı tırnak sorunlarını önler ve daha okunabilirdir.
 
@@ -146,14 +152,20 @@ Bu durumda **Tek satırlık Python komutu kullanın** (EN GÜVENİLİR ÇÖZÜM)
 cd /Users/berhankiyanus/Desktop/Finance
 /opt/homebrew/opt/python@3.14/bin/python3.14 << 'PYEOF'
 import sys
-sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages")
 import os
-os.chdir("/Users/berhankiyanus/Desktop/Finance")
+# Path'i en başta ekle
+sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages")
+# Streamlit'i import et (path eklendikten hemen sonra)
 from streamlit.web.cli import main
+# Çalışma dizinini ayarla (import'tan sonra)
+os.chdir("/Users/berhankiyanus/Desktop/Finance")
+# Streamlit'i başlat
 sys.argv = ["streamlit", "run", "app.py"]
 main()
 PYEOF
 ```
+
+**⚠️ ÖNEMLİ:** `sys.path.insert`'i `import os` ve `from streamlit`'ten ÖNCE yapın!
 
 **Avantaj:** Heredoc kullanımı tırnak sorunlarını önler ve daha okunabilirdir.
 
