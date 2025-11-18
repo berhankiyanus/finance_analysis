@@ -69,8 +69,8 @@ class SentimentAnalyzer:
                 gemini_api_key = os.getenv('GEMINI_API_KEY')
                 if gemini_api_key:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Pro modelini kullan (gemini-1.5-flash API versiyonu ile uyumsuz)
-                    self.gemini_model = genai.GenerativeModel('gemini-1.5-pro')
+                    # Gemini 1.5 Flash modelini kullan (daha hızlı ve ücretsiz katmanda erişilebilir)
+                    self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
                     print("✅ Gemini API yüklendi ve yapılandırıldı.")
                 else:
                     print("⚠️  GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")

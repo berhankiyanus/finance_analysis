@@ -293,20 +293,20 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         search_terms_ordered = priority_terms + other_terms
         
         for search_term in search_terms_ordered:
-            params = {
+        params = {
                 'q': search_term,
-                'from': start_date.strftime('%Y-%m-%d'),
-                'to': end_date.strftime('%Y-%m-%d'),
-                'sortBy': 'publishedAt',
-                'pageSize': 100,
-                'apiKey': api_key
-            }
-            
+            'from': start_date.strftime('%Y-%m-%d'),
+            'to': end_date.strftime('%Y-%m-%d'),
+            'sortBy': 'publishedAt',
+            'pageSize': 100,
+            'apiKey': api_key
+        }
+        
             try:
-                response = requests.get(url, params=params, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
                 # API yanıtını kontrol et
                 api_status = data.get('status', 'unknown')
                 if api_status != 'ok':
@@ -422,7 +422,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             if kap_reports and len(kap_reports) > 0:
                                 print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
                                 # KAP raporlarını haber formatına çevir
-                                news_list = []
+        news_list = []
                                 for report in kap_reports:
                                     news_list.append({
                                         'title': report.get('title', 'KAP Bildirimi'),
@@ -458,8 +458,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             if gemini_api_key:
                 try:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Pro modelini kullan (gemini-1.5-flash API versiyonu ile uyumsuz)
-                    gemini_model = genai.GenerativeModel('gemini-1.5-pro')
+                    # Gemini 1.5 Flash modelini kullan (daha hızlı ve ücretsiz katmanda erişilebilir)
+                    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
                     # Gemini API'nin çalıştığını test et
                     try:
                         test_response = gemini_model.generate_content("Test: Sayı 1")
@@ -626,11 +626,11 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                     if relevance_score < 0.4:
                         continue  # Alakasız haberi atla
                 
-                news_list.append({
+            news_list.append({
                     'title': title,
                     'summary': summary,
                     'content': content,
-                    'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
+                'published_at': pd.to_datetime(article.get('publishedAt', datetime.now())),
                     'source': article.get('source', {}).get('name', 'Unknown') if isinstance(article.get('source'), dict) else 'Unknown',
                     'url': article.get('url', '').strip() if article.get('url') else '',
                     'relevance_score': relevance_score
@@ -991,10 +991,13 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
     """
     Şirket için fiyat verisi çeker.
     
+    Türk hisseleri için otomatik .IS ekleme: Eğer veri bulunamazsa ve ticker'da .IS yoksa,
+    otomatik olarak .IS ekleyip tekrar dener.
+    
     Parametreler:
     ------------
     ticker : str
-        Borsa kodu (örn: "AAPL", "THYAO.IS", "KCHOL")
+        Borsa kodu (örn: "AAPL", "THYAO.IS", "KCHOL", "GARAN")
     period : str
         Veri periyodu (örn: "1mo", "3mo", "6mo", "1y", "2y", "5y")
     
@@ -1004,22 +1007,40 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         Kolonlar: 'date', 'open', 'high', 'low', 'close', 'volume', 'adjusted_close'
     """
     
+    original_ticker = ticker
+    ticker_formatted = ticker
+    is_turkish_stock = False
+    
+    # İlk deneme: Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
+    # 5 karakterli ve sadece harf içeren hisseler için .IS ekle
+    if not ('.IS' in ticker or ticker.endswith('.IS')):
+        if len(ticker) == 5 and ticker.isalpha() and ticker.isupper():
+            ticker_formatted = ticker + '.IS'
+            is_turkish_stock = True
+            print(f"📊 Türk hissesi tespit edildi: {ticker} -> {ticker_formatted}")
+    
     try:
-        # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
-        # 5 karakterli ve sadece harf içeren hisseler için .IS ekle
-        ticker_formatted = ticker
-        if not ('.IS' in ticker or ticker.endswith('.IS')):
-            if len(ticker) == 5 and ticker.isalpha() and ticker.isupper():
-                ticker_formatted = ticker + '.IS'
-                print(f"📊 Türk hissesi tespit edildi: {ticker} -> {ticker_formatted}")
-        
         # yfinance ile veri çek
         stock = yf.Ticker(ticker_formatted)
         hist = stock.history(period=period)
         
-        if hist.empty:
-            print(f"⚠️  {ticker} için veri bulunamadı. Dummy veri kullanılıyor.")
-            return _get_dummy_price_data(ticker)
+        # Eğer veri bulunamadıysa ve .IS eklenmemişse, .IS ekleyip tekrar dene
+        if hist.empty and not is_turkish_stock and not ('.IS' in original_ticker or original_ticker.endswith('.IS')):
+            # Türk hissesi olabilir - .IS ekleyip tekrar dene
+            ticker_with_is = original_ticker + '.IS'
+            print(f"🔄 {original_ticker} için veri bulunamadı, {ticker_with_is} ile tekrar deneniyor...")
+            stock = yf.Ticker(ticker_with_is)
+            hist = stock.history(period=period)
+            
+            if not hist.empty:
+                ticker_formatted = ticker_with_is
+                print(f"✅ {ticker_with_is} ile veri bulundu!")
+            else:
+                print(f"⚠️  {original_ticker} ve {ticker_with_is} için veri bulunamadı. Dummy veri kullanılıyor.")
+                return _get_dummy_price_data(original_ticker)
+        elif hist.empty:
+            print(f"⚠️  {ticker_formatted} için veri bulunamadı. Dummy veri kullanılıyor.")
+            return _get_dummy_price_data(original_ticker)
         
         # Kolon isimlerini standartlaştır
         hist.reset_index(inplace=True)
