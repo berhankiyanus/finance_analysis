@@ -639,14 +639,108 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
         
         # DataFrame oluştur
         if not news_list:
-            print(f"⚠️  NewsAPI'den haber döndü ama geçerli haber bulunamadı. Dummy veri kullanılıyor.")
+            print(f"⚠️  NewsAPI'den haber döndü ama geçerli haber bulunamadı.")
+            # KAP raporlarını dene (Türk şirketleri için)
+            ticker_clean_for_kap = ticker.replace('.IS', '').replace('.', '').upper() if ticker else ''
+            is_turkish_stock = ticker and (
+                ticker.endswith('.IS') or 
+                len(ticker_clean_for_kap) == 5 or
+                (len(ticker_clean_for_kap) >= 4 and ticker_clean_for_kap.isalpha())
+            )
+            
+            if is_turkish_stock:
+                print(f"   🔄 KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_kap})...")
+                try:
+                    from .kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    try:
+                        from src.kap_scraper import get_kap_financial_reports
+                    except ImportError:
+                        get_kap_financial_reports = None
+                
+                if get_kap_financial_reports:
+                    try:
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        
+                        if kap_reports and len(kap_reports) > 0:
+                            print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                            # KAP raporlarını haber formatına çevir
+                            kap_news_list = []
+                            for report in kap_reports:
+                                kap_news_list.append({
+                                    'title': report.get('title', 'KAP Bildirimi'),
+                                    'summary': report.get('title', ''),
+                                    'content': report.get('title', ''),
+                                    'published_at': report.get('date', datetime.now()),
+                                    'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                    'url': report.get('link', ''),
+                                    'relevance_score': 0.8
+                                })
+                            
+                            if kap_news_list:
+                                kap_df = pd.DataFrame(kap_news_list)
+                                print(f"   ✅ {len(kap_df)} haber KAP'tan alındı!")
+                                return kap_df
+                    except Exception as kap_error:
+                        print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                        import traceback
+                        traceback.print_exc()
+            
+            print("⚠️  Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
         
         news_df = pd.DataFrame(news_list)
         
         # Boş DataFrame kontrolü
         if news_df.empty:
-            print(f"⚠️  NewsAPI'den haber döndü ama DataFrame boş. Dummy veri kullanılıyor.")
+            print(f"⚠️  NewsAPI'den haber döndü ama DataFrame boş.")
+            # KAP raporlarını dene (Türk şirketleri için)
+            ticker_clean_for_kap = ticker.replace('.IS', '').replace('.', '').upper() if ticker else ''
+            is_turkish_stock = ticker and (
+                ticker.endswith('.IS') or 
+                len(ticker_clean_for_kap) == 5 or
+                (len(ticker_clean_for_kap) >= 4 and ticker_clean_for_kap.isalpha())
+            )
+            
+            if is_turkish_stock:
+                print(f"   🔄 KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_kap})...")
+                try:
+                    from .kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    try:
+                        from src.kap_scraper import get_kap_financial_reports
+                    except ImportError:
+                        get_kap_financial_reports = None
+                
+                if get_kap_financial_reports:
+                    try:
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        
+                        if kap_reports and len(kap_reports) > 0:
+                            print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                            # KAP raporlarını haber formatına çevir
+                            kap_news_list = []
+                            for report in kap_reports:
+                                kap_news_list.append({
+                                    'title': report.get('title', 'KAP Bildirimi'),
+                                    'summary': report.get('title', ''),
+                                    'content': report.get('title', ''),
+                                    'published_at': report.get('date', datetime.now()),
+                                    'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                    'url': report.get('link', ''),
+                                    'relevance_score': 0.8
+                                })
+                            
+                            if kap_news_list:
+                                kap_df = pd.DataFrame(kap_news_list)
+                                print(f"   ✅ {len(kap_df)} haber KAP'tan alındı!")
+                                return kap_df
+                    except Exception as kap_error:
+                        print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                        import traceback
+                        traceback.print_exc()
+            
+            print("⚠️  Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
         
         # Kolon kontrolü - 'title' kolonu yoksa hata ver
@@ -668,7 +762,54 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
             news_df = news_df.sort_values('published_at', ascending=False).reset_index(drop=True)
         
         if news_df.empty:
-            print(f"⚠️  Filtreleme sonrası haber kalmadı. Dummy veri kullanılıyor.")
+            print(f"⚠️  Filtreleme sonrası haber kalmadı.")
+            # KAP raporlarını dene (Türk şirketleri için)
+            ticker_clean_for_kap = ticker.replace('.IS', '').replace('.', '').upper() if ticker else ''
+            is_turkish_stock = ticker and (
+                ticker.endswith('.IS') or 
+                len(ticker_clean_for_kap) == 5 or
+                (len(ticker_clean_for_kap) >= 4 and ticker_clean_for_kap.isalpha())
+            )
+            
+            if is_turkish_stock:
+                print(f"   🔄 KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_kap})...")
+                try:
+                    from .kap_scraper import get_kap_financial_reports
+                except ImportError:
+                    try:
+                        from src.kap_scraper import get_kap_financial_reports
+                    except ImportError:
+                        get_kap_financial_reports = None
+                
+                if get_kap_financial_reports:
+                    try:
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        
+                        if kap_reports and len(kap_reports) > 0:
+                            print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                            # KAP raporlarını haber formatına çevir
+                            kap_news_list = []
+                            for report in kap_reports:
+                                kap_news_list.append({
+                                    'title': report.get('title', 'KAP Bildirimi'),
+                                    'summary': report.get('title', ''),
+                                    'content': report.get('title', ''),
+                                    'published_at': report.get('date', datetime.now()),
+                                    'source': 'KAP (Kamuyu Aydınlatma Platformu)',
+                                    'url': report.get('link', ''),
+                                    'relevance_score': 0.8
+                                })
+                            
+                            if kap_news_list:
+                                kap_df = pd.DataFrame(kap_news_list)
+                                print(f"   ✅ {len(kap_df)} haber KAP'tan alındı!")
+                                return kap_df
+                    except Exception as kap_error:
+                        print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                        import traceback
+                        traceback.print_exc()
+            
+            print("⚠️  Dummy veri kullanılıyor.")
             return _get_dummy_news(company_name, days_back)
         
         print(f"✅ {len(news_df)} haber bulundu (bugün dahil son {days_back} gün).")
