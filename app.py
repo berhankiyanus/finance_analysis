@@ -503,12 +503,18 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         news_df = results.get('news_df', pd.DataFrame())
                         news_count = results.get('news_count', 0)
                         is_dummy_data = False
+                        dummy_count = 0
                         
                         # Dummy veri kontrolü: Eğer haberler varsa ve tüm haberlerin kaynağı "Dummy News" ise
                         if not news_df.empty and 'source' in news_df.columns:
                             unique_sources = news_df['source'].unique()
+                            # Dummy News kaynağı sayısını say
+                            dummy_count = (news_df['source'] == 'Dummy News').sum()
                             if len(unique_sources) == 1 and 'Dummy News' in unique_sources:
                                 is_dummy_data = True
+                            elif dummy_count > 0:
+                                # Bazı haberler dummy olabilir
+                                st.warning(f"⚠️ **Dikkat:** {dummy_count} haber dummy (test) verisi. {len(news_df) - dummy_count} gerçek haber bulundu.")
                         elif news_df.empty and news_count == 0:
                             # Boş DataFrame ve 0 haber sayısı
                             # Eğer API key yoksa, dummy data kullanılmış olabilir
@@ -600,7 +606,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                     yaxis_title='Fiyat',
                                     height=400
                                 )
-                                st.plotly_chart(fig_quick, use_container_width=True)
+                                st.plotly_chart(fig_quick, width='stretch')
                         
                         # TAB 2: Detaylı Analiz
                         with tab_detailed:
@@ -792,7 +798,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                     fig.update_yaxes(title_text="Hacim", row=2, col=1)
                                     fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
                                     
-                                    st.plotly_chart(fig, use_container_width=True, config={
+                                    st.plotly_chart(fig, width='stretch', config={
                                         'displayModeBar': True,
                                         'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
                                     })
@@ -834,7 +840,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         fig_candle.update_xaxes(title_text="Tarih")
                                         fig_candle.update_yaxes(title_text="Fiyat ($)")
                                         
-                                        st.plotly_chart(fig_candle, use_container_width=True, config={
+                                        st.plotly_chart(fig_candle, width='stretch', config={
                                             'displayModeBar': True,
                                             'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
                                         })
@@ -910,7 +916,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         hovermode='x unified'
                                     )
                                     
-                                    st.plotly_chart(tech_fig, use_container_width=True, config={
+                                    st.plotly_chart(tech_fig, width='stretch', config={
                                         'displayModeBar': True,
                                         'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
                                     })
@@ -942,7 +948,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                                 height=300
                                             )
                                             
-                                            st.plotly_chart(fig_sentiment, use_container_width=True)
+                                            st.plotly_chart(fig_sentiment, width='stretch')
                                         
                                         with col_news2:
                                             # Sentiment zaman serisi
@@ -971,7 +977,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                                     hovermode='x unified'
                                                 )
                                                 
-                                                st.plotly_chart(fig_timeseries, use_container_width=True)
+                                                st.plotly_chart(fig_timeseries, width='stretch')
                                         
                                         # Confidence dağılımı
                                         if 'sentiment_confidence' in news_df.columns:
@@ -989,7 +995,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                                 height=300
                                             )
                                             
-                                            st.plotly_chart(fig_confidence, use_container_width=True)
+                                            st.plotly_chart(fig_confidence, width='stretch')
                                     else:
                                         st.info("Haber analizi için veri bulunamadı.")
                         
@@ -1158,7 +1164,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 height=350
                             )
                             
-                            st.plotly_chart(fig_scores, use_container_width=True)
+                            st.plotly_chart(fig_scores, width='stretch')
                         
                         with col_score2:
                             # Skor radar grafiği
@@ -1187,7 +1193,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 height=350
                             )
                             
-                            st.plotly_chart(fig_radar, use_container_width=True)
+                            st.plotly_chart(fig_radar, width='stretch')
                         
                     except Exception as e:
                         st.error(f"❌ Hata oluştu: {str(e)}")
@@ -1219,7 +1225,7 @@ elif page == "📋 İzleme Listesi":
                         'Ticker': current_watchlist,
                         'Durum': ['✅ Aktif'] * len(current_watchlist)
                     })
-                    st.dataframe(watchlist_df, use_container_width=True)
+                    st.dataframe(watchlist_df, width='stretch')
                 else:
                     st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
             
@@ -1270,7 +1276,7 @@ elif page == "📋 İzleme Listesi":
                         'Ticker': st.session_state.local_watchlist,
                         'Durum': ['✅ Aktif'] * len(st.session_state.local_watchlist)
                     })
-                    st.dataframe(watchlist_df, use_container_width=True)
+                    st.dataframe(watchlist_df, width='stretch')
                 else:
                     st.info("📝 Henüz izleme listesi oluşturulmamış.")
             
@@ -1460,7 +1466,7 @@ elif page == "💼 Portföy Optimizasyonu":
                                     height=400
                                 )
                                 
-                                st.plotly_chart(fig, use_container_width=True)
+                                st.plotly_chart(fig, width='stretch')
                                 
                                 # Pasta grafiği
                                 fig_pie = go.Figure(data=[go.Pie(
@@ -1474,11 +1480,11 @@ elif page == "💼 Portföy Optimizasyonu":
                                     height=400
                                 )
                                 
-                                st.plotly_chart(fig_pie, use_container_width=True)
+                                st.plotly_chart(fig_pie, width='stretch')
                                 
                                 # Tablo
                                 st.subheader("📋 Detaylı Ağırlıklar")
-                                st.dataframe(weights_df, use_container_width=True)
+                                st.dataframe(weights_df, width='stretch')
                     
                     except Exception as e:
                         st.error(f"❌ Optimizasyon hatası: {str(e)}")
@@ -1596,11 +1602,11 @@ elif page == "📊 Sektörel Analiz":
                             height=500
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                         
                         # Tablo
                         st.subheader("📋 Detaylı Matris")
-                        st.dataframe(corr_matrix, use_container_width=True)
+                        st.dataframe(corr_matrix, width='stretch')
         
         with tab3:
             st.subheader("🔄 Sektör Rotasyonu")
@@ -1649,11 +1655,11 @@ elif page == "📊 Sektörel Analiz":
                             height=400
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                         
                         # Tablo
                         st.subheader("📋 Detaylı Sonuçlar")
-                        st.dataframe(rotation_df, use_container_width=True)
+                        st.dataframe(rotation_df, width='stretch')
                     else:
                         st.error("❌ Sektör rotasyonu analizi yapılamadı.")
         
@@ -1753,11 +1759,11 @@ elif page == "🔥 Trending Hisseler":
                             height=400
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                         
                         # Tablo
                         st.subheader("📋 Detaylı Sonuçlar")
-                        st.dataframe(trending_df, use_container_width=True)
+                        st.dataframe(trending_df, width='stretch')
                     else:
                         st.warning("⚠️ Trending analizi yapılamadı (forum verisi gerekli).")
                         st.info("💡 Gerçek forum verisi için API entegrasyonu gerekli.")

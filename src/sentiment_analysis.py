@@ -69,8 +69,8 @@ class SentimentAnalyzer:
                 gemini_api_key = os.getenv('GEMINI_API_KEY')
                 if gemini_api_key:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Flash modelini kullan (gemini-pro artık kullanılamıyor)
-                    self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                    # Gemini 1.5 Pro modelini kullan (gemini-1.5-flash API versiyonu ile uyumsuz)
+                    self.gemini_model = genai.GenerativeModel('gemini-1.5-pro')
                     print("✅ Gemini API yüklendi ve yapılandırıldı.")
                 else:
                     print("⚠️  GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")
@@ -180,7 +180,7 @@ class SentimentAnalyzer:
                 predicted_class = 'negative'
                 confidence = neg_prob
             # Eğer neutral en yüksekse ama pozitif/negatif arasında anlamlı fark varsa
-            elif predicted_class == 'neutral' and diff > 0.08:  # %8'den fazla fark (çok agresif)
+            elif predicted_class == 'neutral' and diff > 0.05:  # %5'ten fazla fark (daha agresif)
                 if pos_prob > neg_prob:
                     predicted_class = 'positive'
                     confidence = pos_prob
@@ -188,13 +188,21 @@ class SentimentAnalyzer:
                     predicted_class = 'negative'
                     confidence = neg_prob
             # Eğer pozitif/negatif olasılıkları eşitse ama neutral'dan yüksekse
-            elif pos_prob > 0.25 or neg_prob > 0.25:  # En az %25 olasılık varsa
+            elif pos_prob > 0.20 or neg_prob > 0.20:  # En az %20 olasılık varsa (daha agresif)
                 if pos_prob > neg_prob:
                     predicted_class = 'positive'
                     confidence = pos_prob
                 else:
                     predicted_class = 'negative'
                     confidence = neg_prob
+            # Son çare: Eğer pozitif/negatif arasında %3'ten fazla fark varsa, onu kullan
+            elif diff > 0.03 and (pos_prob > 0.15 or neg_prob > 0.15):
+                if pos_prob > neg_prob:
+                    predicted_class = 'positive'
+                    confidence = pos_prob * 0.8  # Biraz daha düşük güven
+                else:
+                    predicted_class = 'negative'
+                    confidence = neg_prob * 0.8
             
             return {
                 'class': predicted_class,
@@ -484,15 +492,21 @@ def aggregate_sentiment(news_df: pd.DataFrame) -> float:
     if news_df.empty or 'sentiment_score' not in news_df.columns:
         return 50.0  # Nötr skor
     
+    # Duplicate index'leri temizle (reindex hatasını önlemek için)
+    news_df = news_df.reset_index(drop=True)
+    
     # Alakasız haberleri filtrele (relevance score kontrolü)
     news_df_filtered = news_df.copy()
     if 'relevance_score' in news_df_filtered.columns:
         # Sadece alakalı haberleri kullan (0.3'ten yüksek relevance)
         news_df_filtered = news_df_filtered[news_df_filtered['relevance_score'] >= 0.3].copy()
+        # Index'i reset et (duplicate labels hatasını önlemek için)
+        news_df_filtered = news_df_filtered.reset_index(drop=True)
     
     # Eğer filtreleme sonrası haber kalmadıysa, tüm haberleri kullan
     if news_df_filtered.empty:
         news_df_filtered = news_df.copy()
+        news_df_filtered = news_df_filtered.reset_index(drop=True)
     
     # Daha yeni haberler daha yüksek ağırlık alır
     if 'published_at' in news_df_filtered.columns:
@@ -863,6 +877,8 @@ def analyze_stock_news(
     
     # Sentiment analizi yap
     stock_news_df = pd.DataFrame(stock_news)
+    # Duplicate index'leri temizle (reindex hatasını önlemek için)
+    stock_news_df = stock_news_df.reset_index(drop=True)
     stock_news_with_sentiment = analyze_news_sentiment(
         stock_news_df,
         analyzer=analyzer,
@@ -945,6 +961,8 @@ def analyze_market_news(
     
     # Sentiment analizi yap
     market_news_df = pd.DataFrame(market_news)
+    # Duplicate index'leri temizle (reindex hatasını önlemek için)
+    market_news_df = market_news_df.reset_index(drop=True)
     market_news_with_sentiment = analyze_news_sentiment(
         market_news_df,
         analyzer=analyzer,

@@ -458,8 +458,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             if gemini_api_key:
                 try:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Flash modelini kullan (gemini-pro artık kullanılamıyor)
-                    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                    # Gemini 1.5 Pro modelini kullan (gemini-1.5-flash API versiyonu ile uyumsuz)
+                    gemini_model = genai.GenerativeModel('gemini-1.5-pro')
                     # Gemini API'nin çalıştığını test et
                     try:
                         test_response = gemini_model.generate_content("Test: Sayı 1")

@@ -572,7 +572,8 @@ def generate_detailed_report(
                 gemini_api_key = os.getenv('GEMINI_API_KEY')
                 if gemini_api_key:
                     genai.configure(api_key=gemini_api_key)
-                    gemini_model = genai.GenerativeModel('gemini-pro')
+                    # Gemini 1.5 Pro modelini kullan (gemini-pro artık kullanılamıyor)
+                    gemini_model = genai.GenerativeModel('gemini-1.5-pro')
                     
                     # Top feature'ları al (SHAP değerleri varsa)
                     top_features = []
