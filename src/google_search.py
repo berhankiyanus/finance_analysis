@@ -22,7 +22,8 @@ load_dotenv(dotenv_path=env_path)
 def search_google_news(query: str, num_results: int = 10, 
                       api_key: Optional[str] = None,
                       search_engine_id: Optional[str] = None,
-                      use_custom_search: bool = True) -> List[Dict]:
+                      use_custom_search: bool = True,
+                      days_back: int = 7) -> List[Dict]:
     """
     Google Search API kullanarak haber araması yapar.
     
@@ -46,7 +47,7 @@ def search_google_news(query: str, num_results: int = 10,
     """
     
     if use_custom_search:
-        return _search_with_custom_search_api(query, num_results, api_key, search_engine_id)
+        return _search_with_custom_search_api(query, num_results, api_key, search_engine_id, days_back)
     else:
         # Alternatif: DuckDuckGo veya başka bir servis
         return _search_with_alternative(query, num_results)
@@ -54,7 +55,8 @@ def search_google_news(query: str, num_results: int = 10,
 
 def _search_with_custom_search_api(query: str, num_results: int,
                                    api_key: Optional[str],
-                                   search_engine_id: Optional[str]) -> List[Dict]:
+                                   search_engine_id: Optional[str],
+                                   days_back: int = 7) -> List[Dict]:
     """
     Google Custom Search API kullanarak arama yapar.
     """
@@ -73,13 +75,22 @@ def _search_with_custom_search_api(query: str, num_results: int,
     try:
         url = "https://www.googleapis.com/customsearch/v1"
         
+        # Türkçe kaynaklara öncelik ver (Türk şirketleri için)
+        # Query'de Türkçe karakterler varsa veya .IS uzantılı ticker varsa Türkçe arama yap
+        is_turkish_query = any(char in query for char in 'çğıöşüÇĞIİÖŞÜ') or '.IS' in query.upper()
+        
         params = {
             'key': api_key,
             'cx': search_engine_id,
             'q': query,
             'num': min(num_results, 10),  # Google API maksimum 10 sonuç döndürür
-            'dateRestrict': 'd1'  # Son 24 saat
+            'dateRestrict': f'd{days_back}' if days_back <= 30 else 'm1'  # Son X gün veya 1 ay
         }
+        
+        # Türkçe sorgular için dil parametresi ekle
+        if is_turkish_query:
+            params['lr'] = 'lang_tr'  # Türkçe sonuçlara öncelik
+            params['cr'] = 'countryTR'  # Türkiye kaynaklarına öncelik
         
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()

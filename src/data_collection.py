@@ -29,6 +29,55 @@ env_path = project_root / '.env'
 load_dotenv(dotenv_path=env_path)
 
 
+def get_company_name(ticker: str) -> str:
+    """
+    Hisse kodundan şirket tam adını çeker (yfinance kullanarak).
+    
+    Örn: 'THYAO.IS' -> 'Turk Hava Yollari Ao' veya 'Türk Hava Yolları'
+    
+    Parametreler:
+    ------------
+    ticker : str
+        Borsa kodu (örn: "THYAO.IS", "AAPL", "KCHOL")
+    
+    Döndürür:
+    --------
+    str
+        Şirket tam adı (bulunamazsa ticker'ın temizlenmiş hali)
+    """
+    try:
+        # Türk hisseleri için .IS uzantısı ekle (eğer yoksa)
+        ticker_formatted = ticker
+        if not ('.IS' in ticker or ticker.endswith('.IS')):
+            if len(ticker) == 5 and ticker.isalpha() and ticker.isupper():
+                ticker_formatted = ticker + '.IS'
+        
+        stock = yf.Ticker(ticker_formatted)
+        info = stock.info
+        
+        # Önce longName'i dene, yoksa shortName'i al
+        company_name = info.get('longName') or info.get('shortName') or info.get('name')
+        
+        # Eğer yfinance isim bulamazsa, kodun kendisini döndür (veya .IS uzantısını temizle)
+        if not company_name:
+            return ticker.replace(".IS", "").replace(".", "")
+        
+        # Gereksiz uzun ifadeleri temizle (isteğe bağlı)
+        clean_name = company_name.replace("Anonim Sirketi", "").replace("A.S.", "").replace("Anonim Şirketi", "").strip()
+        
+        # Türkçe karakterleri koru ama gereksiz kısaltmaları temizle
+        if clean_name:
+            print(f"✅ Şirket adı bulundu: {ticker} -> {clean_name}")
+            return clean_name
+        
+        return ticker.replace(".IS", "").replace(".", "")
+        
+    except Exception as e:
+        print(f"⚠️  Şirket ismi alınamadı ({ticker}): {e}")
+        # Hata durumunda ticker'ın temizlenmiş halini döndür
+        return ticker.replace(".IS", "").replace(".", "")
+
+
 def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = None, ticker: Optional[str] = None) -> pd.DataFrame:
     """
     Şirket hakkında son haberleri toplar.
@@ -36,19 +85,27 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     Parametreler:
     ------------
     company_name : str
-        Şirket adı (örn: "Apple", "Microsoft")
+        Şirket adı (örn: "Apple", "Microsoft"). Eğer ticker verilmişse ve company_name eksikse, otomatik çekilir.
     days_back : int
         Kaç gün geriye gidilecek (varsayılan: 30)
     api_key : str, optional
         NewsAPI key'i. Eğer verilmezse .env dosyasından okunur.
     ticker : str, optional
-        Borsa kodu (örn: "AAPL", "MSFT"). Relevance hesaplamasında kullanılır.
+        Borsa kodu (örn: "AAPL", "MSFT"). Şirket adını otomatik çekmek ve relevance hesaplamasında kullanılır.
     
     Döndürür:
     --------
     pd.DataFrame
         Kolonlar: 'title', 'summary', 'content', 'published_at', 'source', 'url', 'relevance_score'
     """
+    
+    # Eğer ticker verilmişse ve company_name eksik/generikse, yfinance'den şirket adını çek
+    if ticker and (not company_name or company_name == ticker or len(company_name) <= 5):
+        print(f"🔍 Şirket adı eksik/generik, yfinance'den çekiliyor: {ticker}")
+        fetched_name = get_company_name(ticker)
+        if fetched_name and fetched_name != ticker.replace(".IS", "").replace(".", ""):
+            company_name = fetched_name
+            print(f"✅ Şirket adı güncellendi: {company_name}")
     
     # API key'i al
     if api_key is None:
@@ -1096,16 +1153,84 @@ def get_all_data_for_stock(
     except Exception as e:
         print(f"   ❌ Fiyat verisi çekilirken hata: {e}")
     
-    # 2. Haberler (NewsAPI)
-    print("\n2️⃣  NewsAPI'den haberler çekiliyor...")
+    # 2. Haberler (NewsAPI + Google Search + KAP - Akıllı Arama)
+    print("\n2️⃣  Haberler çekiliyor (Akıllı Arama ile)...")
     try:
+        # Önce şirket adını otomatik çek (eğer eksikse veya generikse)
+        if not company_name or company_name == ticker or len(company_name) <= 5:
+            print("   🔍 Şirket adı eksik/generik, yfinance'den çekiliyor...")
+            company_name = get_company_name(ticker)
+            results['company_name'] = company_name
+            print(f"   ✅ Şirket adı: {company_name}")
+        
+        # NewsAPI ile haber çek (otomatik şirket adı ile)
+        print("   📰 NewsAPI deneniyor...")
         results['news_df'] = get_news(company_name, days_back=days_back, ticker=ticker)
+        
+        # Eğer NewsAPI'de yeterli haber yoksa, Google Search'ü dene
+        if results['news_df'].empty or len(results['news_df']) < 3:
+            print("   🔄 NewsAPI'de yeterli haber yok, Google Search deneniyor...")
+            try:
+                from .google_search import search_market_news
+            except ImportError:
+                try:
+                    from src.google_search import search_market_news
+                except ImportError:
+                    search_market_news = None
+            
+            if search_market_news:
+                try:
+                    # Akıllı arama sorguları (şirket adı + Türkçe terimler)
+                    ticker_clean = ticker.replace('.IS', '').replace('.', '').upper()
+                    search_queries = [
+                        f"{company_name} hisse haberleri",
+                        f"{ticker_clean} borsa yorum",
+                        f"{company_name} finansal sonuçlar",
+                        f"{ticker_clean} kar zarar"
+                    ]
+                    
+                    google_news = []
+                    for query in search_queries:
+                        news = search_market_news([query], num_results=5)
+                        if news:
+                            google_news.extend(news)
+                            if len(google_news) >= 5:  # Yeterli haber bulundu
+                                break
+                    
+                    if google_news:
+                        # Google Search haberlerini DataFrame formatına çevir
+                        google_news_list = []
+                        for news_item in google_news:
+                            google_news_list.append({
+                                'title': news_item.get('title', ''),
+                                'summary': news_item.get('snippet', ''),
+                                'content': news_item.get('snippet', ''),
+                                'published_at': news_item.get('published_at', datetime.now()),
+                                'source': news_item.get('source', 'Google Search'),
+                                'url': news_item.get('link', ''),
+                                'relevance_score': 0.7  # Google Search haberleri için orta relevance
+                            })
+                        
+                        google_df = pd.DataFrame(google_news_list)
+                        if not results['news_df'].empty:
+                            # Mevcut haberlerle birleştir (duplicate kontrolü ile)
+                            combined_df = pd.concat([results['news_df'], google_df], ignore_index=True)
+                            # URL'e göre duplicate'leri temizle
+                            results['news_df'] = combined_df.drop_duplicates(subset=['url'], keep='first')
+                        else:
+                            results['news_df'] = google_df
+                        print(f"   ✅ Google Search'ten {len(google_news)} haber eklendi.")
+                except Exception as google_error:
+                    print(f"   ⚠️  Google Search hatası: {google_error}")
+        
         if not results['news_df'].empty:
-            print(f"   ✅ {len(results['news_df'])} haber bulundu.")
+            print(f"   ✅ Toplam {len(results['news_df'])} haber bulundu (NewsAPI + Google Search + KAP).")
         else:
-            print("   ⚠️  Haber bulunamadı.")
+            print("   ⚠️  Haber bulunamadı (NewsAPI, Google Search ve KAP denendi).")
     except Exception as e:
         print(f"   ❌ Haber çekilirken hata: {e}")
+        import traceback
+        traceback.print_exc()
     
     # 3. Finansal göstergeler (yfinance)
     print("\n3️⃣  Finansal göstergeler çekiliyor...")
