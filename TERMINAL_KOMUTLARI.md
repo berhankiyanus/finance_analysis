@@ -122,6 +122,17 @@ venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 **Neden?** `venv/bin/python3 -m uvicorn` doğrudan Python modülü olarak çalıştırır ve izin sorunlarını atlar.
 
+### "python3: realpath: venv/bin/: Operation not permitted" Hatası (Streamlit)
+
+Bu durumda **PYTHONPATH ile tam yol kullanın**:
+
+```bash
+cd /Users/berhankiyanus/Desktop/Finance
+PYTHONPATH=/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages:$PYTHONPATH /opt/homebrew/opt/python@3.14/bin/python3.14 -m streamlit run app.py
+```
+
+**Neden?** macOS Gatekeeper venv/bin/python3'e erişimi engelliyor. Tam Python yolunu ve PYTHONPATH kullanarak venv paketlerine erişebiliriz.
+
 ### "command not found: uvicorn" Hatası
 
 1. Virtual environment aktif mi kontrol edin:
