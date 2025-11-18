@@ -182,12 +182,12 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         
         # Türk şirketleri için bilinen İngilizce alternatif isimler
         turkish_company_aliases = {
-            'Koç Holding': ['Koc Holding', 'Koc Group', 'Koc', 'KCHOL'],
-            'Sabancı Holding': ['Sabanci Holding', 'Sabanci Group', 'Sabanci', 'SAHOL'],
-            'Türk Hava Yolları': ['Turkish Airlines', 'THY', 'THYAO'],
-            'Garanti BBVA': ['Garanti Bank', 'Garanti', 'GARAN'],
-            'Akbank': ['Akbank', 'AKBNK'],
-            'İş Bankası': ['Is Bankasi', 'Is Bank', 'ISCTR'],
+            'Koç Holding': ['Koc Holding', 'Koc Group', 'Koc', 'KCHOL', 'Koc Holding A.S.', 'Koc Holding AS'],
+            'Sabancı Holding': ['Sabanci Holding', 'Sabanci Group', 'Sabanci', 'SAHOL', 'Sabanci Holding A.S.'],
+            'Türk Hava Yolları': ['Turkish Airlines', 'THY', 'THYAO', 'Turkish Airlines Inc'],
+            'Garanti BBVA': ['Garanti Bank', 'Garanti', 'GARAN', 'Garanti BBVA Bank'],
+            'Akbank': ['Akbank', 'AKBNK', 'Akbank T.A.S.'],
+            'İş Bankası': ['Is Bankasi', 'Is Bank', 'ISCTR', 'Is Bankasi A.S.'],
             'BİST': ['BIST', 'Borsa Istanbul', 'Istanbul Stock Exchange'],
         }
         
@@ -416,7 +416,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     if get_kap_financial_reports:
                         try:
                             ticker_clean = ticker.replace('.IS', '').upper()
-                            kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                            # KAP limit'ini artır (daha fazla rapor bulmak için)
+                            kap_reports = get_kap_financial_reports(ticker_clean, limit=20)
                             
                             if kap_reports and len(kap_reports) > 0:
                                 print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -661,7 +662,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                 
                 if get_kap_financial_reports:
                     try:
-                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        # KAP limit'ini artır (daha fazla rapor bulmak için)
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=20)
                         
                         if kap_reports and len(kap_reports) > 0:
                             print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -715,7 +717,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                 
                 if get_kap_financial_reports:
                     try:
-                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        # KAP limit'ini artır (daha fazla rapor bulmak için)
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=20)
                         
                         if kap_reports and len(kap_reports) > 0:
                             print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -784,7 +787,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                 
                 if get_kap_financial_reports:
                     try:
-                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        # KAP limit'ini artır (daha fazla rapor bulmak için)
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=20)
                         
                         if kap_reports and len(kap_reports) > 0:
                             print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -852,7 +856,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
             if get_kap_financial_reports:
                 try:
                     ticker_clean = ticker.replace('.IS', '').upper()
-                    kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                    # KAP limit'ini artır (daha fazla rapor bulmak için)
+                    kap_reports = get_kap_financial_reports(ticker_clean, limit=20)
                     
                     if kap_reports and len(kap_reports) > 0:
                         print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -898,7 +903,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
             if get_kap_financial_reports:
                 try:
                     ticker_clean = ticker.replace('.IS', '').upper()
-                    kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                    # KAP limit'ini artır (daha fazla rapor bulmak için)
+                    kap_reports = get_kap_financial_reports(ticker_clean, limit=20)
                     
                     if kap_reports and len(kap_reports) > 0:
                         print(f"   ✅ {len(kap_reports)} KAP raporu bulundu!")
@@ -1336,16 +1342,24 @@ def get_all_data_for_stock(
                         f"{company_name} hisse haberleri",
                         f"{ticker_clean} borsa yorum",
                         f"{company_name} finansal sonuçlar",
-                        f"{ticker_clean} kar zarar"
+                        f"{ticker_clean} kar zarar",
+                        f"{company_name} borsa",
+                        f"{ticker_clean} hisse",
+                        f"{company_name} yatırım",
+                        f"{ticker_clean} analiz"
                     ]
                     
                     google_news = []
                     for query in search_queries:
-                        news = search_market_news([query], num_results=5)
-                        if news:
-                            google_news.extend(news)
-                            if len(google_news) >= 5:  # Yeterli haber bulundu
-                                break
+                        try:
+                            news = search_market_news([query], num_results=5)
+                            if news:
+                                google_news.extend(news)
+                                if len(google_news) >= 10:  # Daha fazla haber bulmak için limit artırıldı
+                                    break
+                        except Exception as query_error:
+                            print(f"   ⚠️  '{query}' sorgusu için hata: {query_error}")
+                            continue
                     
                     if google_news:
                         # Google Search haberlerini DataFrame formatına çevir
@@ -1396,7 +1410,8 @@ def get_all_data_for_stock(
                 
                 if get_kap_financial_reports:
                     try:
-                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=10)
+                        # KAP limit'ini artır (daha fazla rapor bulmak için)
+                        kap_reports = get_kap_financial_reports(ticker_clean_for_kap, limit=20)
                         
                         if kap_reports and len(kap_reports) > 0:
                             print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
@@ -1451,7 +1466,8 @@ def get_all_data_for_stock(
             from src.kap_scraper import get_kap_financial_reports
         
         try:
-            results['kap_reports'] = get_kap_financial_reports(ticker, limit=10)
+            # KAP limit'ini artır (daha fazla rapor bulmak için)
+            results['kap_reports'] = get_kap_financial_reports(ticker, limit=20)
             if results['kap_reports']:
                 print(f"   ✅ {len(results['kap_reports'])} KAP raporu bulundu.")
             else:
