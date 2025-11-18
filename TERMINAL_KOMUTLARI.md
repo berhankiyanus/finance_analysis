@@ -53,8 +53,10 @@ pip install fastapi "uvicorn[standard]"
 **Önerilen Yöntem (Tek satırlık Python komutu - EN GÜVENİLİR):**
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c 'import sys; sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages"); import os; os.chdir("/Users/berhankiyanus/Desktop/Finance"); from streamlit.web.cli import main; import sys; sys.argv = ["streamlit", "run", "app.py"]; main()'
 ```
+
+**⚠️ ÖNEMLİ:** Tek tırnak (`'`) kullanın, çift tırnak (`"`) değil!
 
 **Alternatif: Script ile:**
 ```bash
@@ -134,8 +136,10 @@ Bu durumda **Tek satırlık Python komutu kullanın** (EN GÜVENİLİR ÇÖZÜM)
 
 ```bash
 cd /Users/berhankiyanus/Desktop/Finance
-/opt/homebrew/opt/python@3.14/bin/python3.14 -c "import sys; sys.path.insert(0, '/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages'); import os; os.chdir('/Users/berhankiyanus/Desktop/Finance'); from streamlit.web.cli import main; sys.argv = ['streamlit', 'run', 'app.py']; main()"
+/opt/homebrew/opt/python@3.14/bin/python3.14 -c 'import sys; sys.path.insert(0, "/Users/berhankiyanus/Desktop/Finance/venv/lib/python3.14/site-packages"); import os; os.chdir("/Users/berhankiyanus/Desktop/Finance"); from streamlit.web.cli import main; import sys; sys.argv = ["streamlit", "run", "app.py"]; main()'
 ```
+
+**⚠️ ÖNEMLİ:** Tek tırnak (`'`) kullanın, çift tırnak (`"`) değil!
 
 **Neden?** macOS Gatekeeper dosya erişimini engelliyor. Tek satırlık Python komutu dosya okuma gerektirmez, doğrudan Python kodunu çalıştırır.
 
