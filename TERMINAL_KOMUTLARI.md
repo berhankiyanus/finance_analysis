@@ -139,6 +139,8 @@ cd /Users/berhankiyanus/Desktop/Finance
 
 **Neden?** macOS Gatekeeper dosya erişimini engelliyor. Tek satırlık Python komutu dosya okuma gerektirmez, doğrudan Python kodunu çalıştırır.
 
+**Not:** Gatekeeper'ı kapatmak yerine bu çözümü kullanın. Detaylar için `GATEKEEPER_COZUM.md` dosyasına bakın.
+
 ### "command not found: uvicorn" Hatası
 
 1. Virtual environment aktif mi kontrol edin:
