@@ -520,12 +520,18 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         if is_dummy_data:
                             st.warning("⚠️ **Dikkat:** Dummy (test) verisi kullanılıyor. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
                         elif news_count == 0 and NEWS_API_KEY is not None:
-                            st.warning("⚠️ **Uyarı:** API key çalışıyor ancak seçilen periyotta haber bulunamadı. "
+                            # KAP ve Google Search fallback'lerinin kullanıldığını belirt
+                            st.warning("⚠️ **Uyarı:** NewsAPI'de seçilen periyotta haber bulunamadı. "
+                                     "**Sistem otomatik olarak şunları denedi:**\n"
+                                     "• NewsAPI (çoklu arama terimleri ile)\n"
+                                     "• Google Search (Türkçe kaynaklara öncelik)\n"
+                                     "• KAP raporları (Türk şirketleri için)\n\n"
                                      "**Çözüm önerileri:**\n"
-                                     "1. Şirket adını İngilizce olarak deneyin (örn: 'Apple' yerine 'Apple Inc.')\n"
-                                     "2. Ticker sembolü kullanın (örn: 'AAPL')\n"
-                                     "3. Haber analizi periyodunu artırın (örn: 7 gün yerine 14 gün)\n"
-                                     "4. Farklı bir şirket adı deneyin")
+                                     "1. Haber analizi periyodunu artırın (örn: 7 gün yerine 30 gün)\n"
+                                     "2. Şirket adını İngilizce olarak deneyin (örn: 'Apple' yerine 'Apple Inc.')\n"
+                                     "3. Ticker sembolü kullanın (örn: 'AAPL')\n"
+                                     "4. Farklı bir şirket adı deneyin\n"
+                                     "5. Türk şirketleri için KAP raporları otomatik kullanılır")
                         elif news_count > 0 and news_count <= 3:
                             st.info("ℹ️ **Bilgi:** Çok az haber bulundu. Bu, seçilen periyotta gerçekten az haber olmasından kaynaklanıyor olabilir. Daha fazla haber için periyodu artırabilirsiniz.")
                         
