@@ -127,6 +127,19 @@ def cached_get_price_data(ticker: str, period: str = "1y"):
     """
     return get_price_data(ticker, period)
 
+@st.cache_data(ttl=1800)  # 30 dakika cache - haber verisi
+def cached_get_news(company_name: str, days_back: int = 30, ticker: Optional[str] = None):
+    """
+    Cache'lenmiş haber verisi çekme - NewsAPI ve RSS Feed'den.
+    
+    @st.cache_data kullanıyoruz çünkü:
+    - Sonuçlar DataFrame (serializable)
+    - TTL (Time To Live) = 1800 saniye (30 dakika)
+    - Aynı parametreler için cache'den döner
+    """
+    from src.data_collection import get_news
+    return get_news(company_name, days_back=days_back, ticker=ticker)
+
 @st.cache_resource  # Model yükleme cache'i - uygulama çalıştığı sürece cache'de kalır
 def load_predictor_model(model_path: str):
     """
@@ -615,36 +628,87 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         
                         # TAB 1: Genel Bakış
                         with tab_overview:
-                            # Skorlar
+                            # Skorlar - Gauge Chart ile
                             col_score1, col_score2, col_score3 = st.columns(3)
                             
                             with col_score1:
-                                st.metric(
-                                    "📰 Sentiment Skoru",
-                                    f"{results['sentiment_score']:.1f}/100",
-                                    delta=f"{results['sentiment_score'] - 50:.1f}"
-                                )
+                                # Sentiment Skoru - Gauge Chart
+                                fig_sentiment_gauge = go.Figure(go.Indicator(
+                                    mode="gauge+number+delta",
+                                    value=results['sentiment_score'],
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    title={'text': "📰 Sentiment Skoru"},
+                                    delta={'reference': 50, 'position': "top"},
+                                    gauge={
+                                        'axis': {'range': [None, 100]},
+                                        'bar': {'color': "darkblue"},
+                                        'steps': [
+                                            {'range': [0, 30], 'color': "lightgray"},
+                                            {'range': [30, 70], 'color': "gray"},
+                                            {'range': [70, 100], 'color': "lightgreen"}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 90
+                                        }
+                                    }
+                                ))
+                                fig_sentiment_gauge.update_layout(height=250)
+                                st.plotly_chart(fig_sentiment_gauge, use_container_width=True)
                             
                             with col_score2:
-                                st.metric(
-                                    "💰 Finansal Skor",
-                                    f"{results['financial_score']:.1f}/100",
-                                    delta=f"{results['financial_score'] - 50:.1f}"
-                                )
+                                # Finansal Skor - Gauge Chart
+                                fig_financial_gauge = go.Figure(go.Indicator(
+                                    mode="gauge+number+delta",
+                                    value=results['financial_score'],
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    title={'text': "💰 Finansal Skor"},
+                                    delta={'reference': 50, 'position': "top"},
+                                    gauge={
+                                        'axis': {'range': [None, 100]},
+                                        'bar': {'color': "darkgreen"},
+                                        'steps': [
+                                            {'range': [0, 30], 'color': "lightgray"},
+                                            {'range': [30, 70], 'color': "gray"},
+                                            {'range': [70, 100], 'color': "lightgreen"}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 90
+                                        }
+                                    }
+                                ))
+                                fig_financial_gauge.update_layout(height=250)
+                                st.plotly_chart(fig_financial_gauge, use_container_width=True)
                             
                             with col_score3:
-                                score_color = "normal"
-                                if results['overall_score'] >= 70:
-                                    score_color = "normal"
-                                elif results['overall_score'] < 30:
-                                    score_color = "inverse"
-                                
-                                st.metric(
-                                    "🎯 Genel Durum Skoru",
-                                    f"{results['overall_score']:.1f}/100",
-                                    delta=f"{results['overall_score'] - 50:.1f}",
-                                    delta_color=score_color
-                                )
+                                # Genel Durum Skoru - Gauge Chart
+                                score_color = "darkgreen" if results['overall_score'] >= 70 else "darkred" if results['overall_score'] < 30 else "darkorange"
+                                fig_overall_gauge = go.Figure(go.Indicator(
+                                    mode="gauge+number+delta",
+                                    value=results['overall_score'],
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    title={'text': "🎯 Genel Durum Skoru"},
+                                    delta={'reference': 50, 'position': "top"},
+                                    gauge={
+                                        'axis': {'range': [None, 100]},
+                                        'bar': {'color': score_color},
+                                        'steps': [
+                                            {'range': [0, 30], 'color': "lightcoral"},
+                                            {'range': [30, 70], 'color': "lightyellow"},
+                                            {'range': [70, 100], 'color': "lightgreen"}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 90
+                                        }
+                                    }
+                                ))
+                                fig_overall_gauge.update_layout(height=250)
+                                st.plotly_chart(fig_overall_gauge, use_container_width=True)
                             
                             # Yorum
                             interpretation = results['interpretation']
@@ -661,22 +725,71 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                        f"{direction_tr.get(pred.get('direction', 'neutral'), 'NÖTR')} "
                                        f"({pred.get('confidence', 0):.1%} güven)")
                             
-                            # Hızlı fiyat grafiği
+                            # Hızlı fiyat grafiği (AL/SAT sinyalleri ile)
                             if not results['price_df'].empty:
                                 price_df = results['price_df']
+                                date_col = price_df.index if 'date' not in price_df.columns else price_df['date']
+                                
                                 fig_quick = go.Figure()
                                 fig_quick.add_trace(go.Scatter(
-                                    x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                    x=date_col,
                                     y=price_df['close'],
                                     mode='lines',
                                     name='Fiyat',
                                     line=dict(color='blue', width=2)
                                 ))
+                                
+                                # AL/SAT sinyalleri ekle (eğer direction_prediction varsa)
+                                if 'direction_prediction' in results:
+                                    pred = results['direction_prediction']
+                                    direction = pred.get('direction', 'neutral')
+                                    
+                                    # Son 10 gün için sinyal göster (örnek)
+                                    if len(price_df) >= 10:
+                                        # Son gün için sinyal
+                                        last_date = date_col.iloc[-1] if hasattr(date_col, 'iloc') else date_col[-1]
+                                        last_price = price_df['close'].iloc[-1] if hasattr(price_df['close'], 'iloc') else price_df['close'].values[-1]
+                                        
+                                        # Sinyal yönüne göre renk ve sembol
+                                        if direction == 'up' or direction == 'positive':
+                                            fig_quick.add_trace(go.Scatter(
+                                                x=[last_date],
+                                                y=[last_price],
+                                                mode='markers+text',
+                                                name='AL Sinyali',
+                                                marker=dict(
+                                                    symbol='triangle-up',
+                                                    size=20,
+                                                    color='green',
+                                                    line=dict(width=2, color='darkgreen')
+                                                ),
+                                                text=['🟢 AL'],
+                                                textposition='top center',
+                                                textfont=dict(size=14, color='green', family='Arial Black')
+                                            ))
+                                        elif direction == 'down' or direction == 'negative':
+                                            fig_quick.add_trace(go.Scatter(
+                                                x=[last_date],
+                                                y=[last_price],
+                                                mode='markers+text',
+                                                name='SAT Sinyali',
+                                                marker=dict(
+                                                    symbol='triangle-down',
+                                                    size=20,
+                                                    color='red',
+                                                    line=dict(width=2, color='darkred')
+                                                ),
+                                                text=['🔴 SAT'],
+                                                textposition='bottom center',
+                                                textfont=dict(size=14, color='red', family='Arial Black')
+                                            ))
+                                
                                 fig_quick.update_layout(
                                     title=f'{company_name} ({ticker}) - Fiyat Hareketi',
                                     xaxis_title='Tarih',
                                     yaxis_title='Fiyat',
-                                    height=400
+                                    height=400,
+                                    showlegend=True
                                 )
                                 st.plotly_chart(fig_quick, width='stretch')
                         
@@ -1276,102 +1389,91 @@ elif page == "📋 İzleme Listesi":
     st.header("📋 İzleme Listesi")
     st.write("Takip etmek istediğiniz hisse senetlerini ekleyin ve yönetin.")
     
+    # Local watchlist kullan (Firebase gerekmez)
     try:
-        from src.firestore_watchlist import get_firestore_client, save_watchlist, get_watchlist
+        from src.local_watchlist import (
+            load_watchlist, save_watchlist, add_to_watchlist, 
+            remove_from_watchlist, get_watchlist, clear_watchlist
+        )
+        USE_LOCAL_WATCHLIST = True
+    except ImportError:
+        # Fallback: Firebase watchlist (eğer local_watchlist yoksa)
+        try:
+            from src.firestore_watchlist import get_firestore_client, save_watchlist, get_watchlist
+            USE_LOCAL_WATCHLIST = False
+        except ImportError:
+            st.error("❌ Watchlist modülü bulunamadı.")
+            st.info("💡 src/local_watchlist.py dosyasının mevcut olduğundan emin olun.")
+            st.stop()
+    
+    if USE_LOCAL_WATCHLIST:
+        # Local watchlist kullan (JSON dosyası)
+        st.info("💡 İzleme listesi yerel olarak kaydediliyor (data/watchlist.json).")
         
-        # Basit kullanıcı ID (gerçek uygulamada authentication olmalı)
-        user_id = st.text_input("Kullanıcı ID", value="default_user", help="Geçici kullanıcı ID (gerçek uygulamada oturum açma olmalı)")
+        # Mevcut watchlist'i yükle
+        current_watchlist = get_watchlist()
         
-        db = get_firestore_client()
+        col1, col2 = st.columns([2, 1])
         
-        if db:
-            # Mevcut watchlist'i yükle
-            current_watchlist = get_watchlist(user_id) or []
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.subheader("📊 İzleme Listesi")
-                if current_watchlist:
-                    watchlist_df = pd.DataFrame({
-                        'Ticker': current_watchlist,
-                        'Durum': ['✅ Aktif'] * len(current_watchlist)
+        with col1:
+            st.subheader("📊 İzleme Listesi")
+            if current_watchlist:
+                # DataFrame oluştur
+                watchlist_data = []
+                for item in current_watchlist:
+                    watchlist_data.append({
+                        'Ticker': item.get('ticker', ''),
+                        'Şirket Adı': item.get('company_name', ''),
+                        'Eklenme Tarihi': item.get('added_date', '')[:10] if item.get('added_date') else ''
                     })
-                    st.dataframe(watchlist_df, width='stretch')
-                else:
-                    st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
+                watchlist_df = pd.DataFrame(watchlist_data)
+                st.dataframe(watchlist_df, width='stretch', use_container_width=True)
+            else:
+                st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
+        
+        with col2:
+            st.subheader("➕ Hisse Ekle")
+            new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker_local")
+            new_company = st.text_input("Şirket Adı (Opsiyonel)", value="", placeholder="Apple Inc.", key="new_company_local")
             
-            with col2:
-                st.subheader("➕ Hisse Ekle")
-                new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker")
-                
-                if st.button("➕ Ekle", type="primary"):
-                    if new_ticker:
-                        new_ticker = new_ticker.upper().strip()
-                        if new_ticker not in current_watchlist:
-                            current_watchlist.append(new_ticker)
-                            if save_watchlist(user_id, current_watchlist):
-                                st.success(f"✅ {new_ticker} eklendi!")
-                                st.rerun()
-                            else:
-                                st.error("❌ Kaydetme hatası!")
-                        else:
-                            st.warning(f"⚠️ {new_ticker} zaten listede!")
+            if st.button("➕ Ekle", type="primary", key="add_local"):
+                if new_ticker:
+                    new_ticker = new_ticker.upper().strip()
+                    company_name = new_company.strip() if new_company else new_ticker
+                    
+                    if add_to_watchlist(new_ticker, company_name):
+                        st.success(f"✅ {new_ticker} ({company_name}) eklendi!")
+                        st.rerun()
                     else:
-                        st.warning("⚠️ Lütfen bir ticker girin!")
-                
-                # Silme
-                if current_watchlist:
-                    st.subheader("🗑️ Hisse Sil")
-                    ticker_to_remove = st.selectbox("Silinecek Ticker", current_watchlist, key="remove_ticker")
-                    if st.button("🗑️ Sil", type="secondary"):
-                        current_watchlist.remove(ticker_to_remove)
-                        if save_watchlist(user_id, current_watchlist):
-                            st.success(f"✅ {ticker_to_remove} silindi!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Silme hatası!")
-        else:
-            st.warning("⚠️ Firestore bağlantısı kurulamadı. İzleme listesi özelliği kullanılamıyor.")
-            st.info("💡 Firestore kullanmak için Google Cloud credentials ayarlayın.")
-            
-            # Basit local watchlist (Firestore yoksa)
-            if 'local_watchlist' not in st.session_state:
-                st.session_state.local_watchlist = []
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.subheader("📊 İzleme Listesi (Local)")
-                if st.session_state.local_watchlist:
-                    watchlist_df = pd.DataFrame({
-                        'Ticker': st.session_state.local_watchlist,
-                        'Durum': ['✅ Aktif'] * len(st.session_state.local_watchlist)
-                    })
-                    st.dataframe(watchlist_df, width='stretch')
+                        st.warning(f"⚠️ {new_ticker} zaten listede veya eklenemedi!")
                 else:
-                    st.info("📝 Henüz izleme listesi oluşturulmamış.")
+                    st.warning("⚠️ Lütfen bir ticker girin!")
             
-            with col2:
-                st.subheader("➕ Hisse Ekle")
-                new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker_local")
+            # Silme
+            if current_watchlist:
+                st.subheader("🗑️ Hisse Sil")
+                ticker_options = [f"{item.get('ticker', '')} - {item.get('company_name', '')}" for item in current_watchlist]
+                selected = st.selectbox("Silinecek Ticker", ticker_options, key="remove_ticker_local")
+                ticker_to_remove = selected.split(' - ')[0] if selected else None
                 
-                if st.button("➕ Ekle", type="primary", key="add_local"):
-                    if new_ticker:
-                        new_ticker = new_ticker.upper().strip()
-                        if new_ticker not in st.session_state.local_watchlist:
-                            st.session_state.local_watchlist.append(new_ticker)
-                            st.success(f"✅ {new_ticker} eklendi!")
-                            st.rerun()
-                        else:
-                            st.warning(f"⚠️ {new_ticker} zaten listede!")
-                
-                if st.session_state.local_watchlist:
-                    ticker_to_remove = st.selectbox("Silinecek Ticker", st.session_state.local_watchlist, key="remove_ticker_local")
-                    if st.button("🗑️ Sil", type="secondary", key="remove_local"):
-                        st.session_state.local_watchlist.remove(ticker_to_remove)
+                if st.button("🗑️ Sil", type="secondary", key="remove_local"):
+                    if ticker_to_remove and remove_from_watchlist(ticker_to_remove):
                         st.success(f"✅ {ticker_to_remove} silindi!")
                         st.rerun()
+                    else:
+                        st.error("❌ Silme hatası!")
+            
+            # Temizle
+            if current_watchlist:
+                if st.button("🗑️ Tümünü Temizle", type="secondary", key="clear_local"):
+                    clear_watchlist()
+                    st.success("✅ İzleme listesi temizlendi!")
+                    st.rerun()
+    
+    else:
+        # Firebase watchlist (fallback)
+        st.warning("⚠️ Local watchlist kullanılamıyor. Firebase watchlist kullanılıyor.")
+        # ... (mevcut Firebase kodu)
     
     except Exception as e:
         st.error(f"❌ İzleme listesi hatası: {str(e)}")

@@ -2,15 +2,17 @@
 KAP (Kamuyu Aydınlatma Platformu) Veri Toplama Modülü
 
 Borsa İstanbul'da işlem gören şirketlerin finansal raporlarını KAP'tan çeker.
+Fail-safe mekanizması: KAP'tan veri çekilemezse Google News sonuçlarını kullanır.
 """
 
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import re
+import urllib.parse
 
 
 def get_kap_financial_reports(ticker: str, limit: int = 5) -> List[Dict]:
@@ -120,19 +122,77 @@ def get_kap_financial_reports(ticker: str, limit: int = 5) -> List[Dict]:
         
         if reports:
             print(f"✅ {ticker} için {len(reports)} finansal rapor bulundu.")
+            return reports[:limit]
         else:
             print(f"⚠️  {ticker} için finansal rapor bulunamadı.")
-            # Dummy veri döndür (test amaçlı)
-            reports = _get_dummy_kap_reports(ticker, limit)
-        
-        return reports[:limit]
+            # Fail-safe: Google News sonuçlarını KAP haberi gibi formatla
+            print("   🔄 Google News sonuçları deneniyor (fail-safe)...")
+            return _get_google_news_as_kap_reports(ticker, limit)
         
     except requests.exceptions.RequestException as e:
         print(f"❌ KAP verisi çekilirken hata: {e}")
-        print("⚠️  Dummy veri kullanılıyor.")
-        return _get_dummy_kap_reports(ticker, limit)
+        print("   🔄 Google News sonuçları deneniyor (fail-safe)...")
+        return _get_google_news_as_kap_reports(ticker, limit)
     except Exception as e:
         print(f"❌ KAP verisi parse edilirken hata: {e}")
+        print("   🔄 Google News sonuçları deneniyor (fail-safe)...")
+        return _get_google_news_as_kap_reports(ticker, limit)
+
+
+def _get_google_news_as_kap_reports(ticker: str, limit: int) -> List[Dict]:
+    """
+    Fail-safe mekanizması: Google News RSS Feed'den haber çekip KAP raporu formatına çevirir.
+    """
+    try:
+        # feedparser kullan (eğer yüklüyse)
+        try:
+            import feedparser
+        except ImportError:
+            print("⚠️  feedparser yüklü değil. Dummy veri kullanılıyor.")
+            return _get_dummy_kap_reports(ticker, limit)
+        
+        # Google News RSS Feed
+        encoded_query = urllib.parse.quote(f"{ticker} hisse borsa finansal")
+        rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=tr-TR&gl=TR&ceid=TR:tr"
+        
+        feed = feedparser.parse(rss_url)
+        
+        if feed.bozo or not feed.entries:
+            print("⚠️  Google News'ten veri alınamadı. Dummy veri kullanılıyor.")
+            return _get_dummy_kap_reports(ticker, limit)
+        
+        reports = []
+        for entry in feed.entries[:limit]:
+            try:
+                # Tarih parse et
+                published_date = None
+                if hasattr(entry, 'published_parsed'):
+                    published_date = datetime(*entry.published_parsed[:6])
+                else:
+                    published_date = datetime.now() - timedelta(days=len(reports))
+                
+                # KAP raporu formatına çevir
+                reports.append({
+                    'title': entry.title if hasattr(entry, 'title') else f"{ticker} Haberi",
+                    'date': published_date,
+                    'link': entry.link if hasattr(entry, 'link') else '',
+                    'type': 'Finansal Haber',
+                    'ticker': ticker
+                })
+            except Exception as e:
+                print(f"⚠️  Haber parse edilirken hata: {e}")
+                continue
+        
+        if reports:
+            print(f"✅ {ticker} için {len(reports)} haber Google News'ten alındı (KAP formatında).")
+        else:
+            print("⚠️  Google News'ten veri alınamadı. Dummy veri kullanılıyor.")
+            return _get_dummy_kap_reports(ticker, limit)
+        
+        return reports
+        
+    except Exception as e:
+        print(f"⚠️  Google News fail-safe hatası: {e}")
         return _get_dummy_kap_reports(ticker, limit)
 
 
@@ -140,8 +200,6 @@ def _get_dummy_kap_reports(ticker: str, limit: int) -> List[Dict]:
     """
     Test amaçlı dummy KAP raporları.
     """
-    from datetime import timedelta
-    
     dummy_reports = []
     base_date = datetime.now()
     

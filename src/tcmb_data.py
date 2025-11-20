@@ -65,15 +65,32 @@ def get_tcmb_data(series_code: str, start_date: Optional[str] = None,
     if EVDS_AVAILABLE and api_key:
         try:
             evds_client = evds.EVDS(api_key)
+            # EVDS kütüphanesi formatı: get_data(series_code, start_date, end_date)
             data = evds_client.get_data(
-                series=series_code,
-                startdate=start_date.replace('-', ''),
-                enddate=end_date.replace('-', '')
+                series_code,
+                start_date.replace('-', ''),
+                end_date.replace('-', '')
             )
             # EVDS kütüphanesi DataFrame döndürür
             if isinstance(data, pd.DataFrame) and not data.empty:
+                # Tarih kolonunu kontrol et ve düzenle
+                if 'Tarih' in data.columns:
+                    data['date'] = pd.to_datetime(data['Tarih'], errors='coerce')
+                    data = data.rename(columns={'Tarih': 'date'})
+                elif 'date' not in data.columns:
+                    # Tarih kolonu yoksa index'ten oluştur
+                    data['date'] = pd.date_range(start=start_date, end=end_date, freq='D')[:len(data)]
+                
+                # Değer kolonunu bul
+                value_cols = [col for col in data.columns if col != 'date' and data[col].dtype in ['float64', 'int64']]
+                if value_cols:
+                    data = data[['date', value_cols[0]]].copy()
+                    data = data.rename(columns={value_cols[0]: 'value'})
+                else:
+                    data['value'] = None
+                
                 print(f"✅ {series_code} için {len(data)} veri noktası çekildi (EVDS kütüphanesi).")
-                return data
+                return data[['date', 'value']].copy()
         except Exception as evds_error:
             print(f"⚠️  EVDS kütüphanesi hatası: {evds_error}")
             print("   Requests ile denenecek...")
