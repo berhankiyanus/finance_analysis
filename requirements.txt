@@ -69,6 +69,10 @@ feedparser>=6.0.10
 # TCMB EVDS API (Opsiyonel - daha kolay kullanım için)
 # evds>=0.1.0  # Yorum satırı: pip install evds ile yüklenebilir
 
+# Vektör Veritabanı (RAG mimarisi için - FAZ 1)
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
 # Test (Opsiyonel)
 pytest>=7.4.0
 pytest-cov>=4.1.0

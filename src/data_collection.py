@@ -632,7 +632,27 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                     if relevance_score < 0.4:
                         continue  # Alakasız haberi atla
                 
-                news_list.append({
+                # Siyasi sınıflandırma ekle (opsiyonel - hata olursa devam et)
+                political_classification = None
+                try:
+                    from .political_classifier import classify_news_political_impact
+                except ImportError:
+                    try:
+                        from src.political_classifier import classify_news_political_impact
+                    except ImportError:
+                        classify_news_political_impact = None
+                
+                if classify_news_political_impact:
+                    try:
+                        news_text_for_classification = f"{summary}\n\n{content[:500]}" if content else summary
+                        political_classification = classify_news_political_impact(
+                            news_text=news_text_for_classification,
+                            news_title=title
+                        )
+                    except Exception as pol_error:
+                        print(f"   ⚠️  Siyasi sınıflandırma hatası: {pol_error}")
+                
+                news_item = {
                     'title': title,
                     'summary': summary,
                     'content': content,
@@ -640,7 +660,17 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                     'source': article.get('source', {}).get('name', 'Unknown') if isinstance(article.get('source'), dict) else 'Unknown',
                     'url': article.get('url', '').strip() if article.get('url') else '',
                     'relevance_score': relevance_score
-                })
+                }
+                
+                # Siyasi sınıflandırma varsa ekle
+                if political_classification:
+                    news_item['political_category'] = political_classification.get('category', 'unknown')
+                    news_item['political_subcategory'] = political_classification.get('subcategory', 'other')
+                    news_item['political_impact_score'] = political_classification.get('political_impact_score', 0.0)
+                    news_item['market_relevance'] = political_classification.get('market_relevance', 0.0)
+                    news_item['expected_market_reaction'] = political_classification.get('expected_market_reaction', 'neutral')
+                
+                news_list.append(news_item)
             except Exception as e:
                 print(f"⚠️  Haber işlenirken hata: {e}")
                 continue  # Bu article'ı atla ve devam et

@@ -1406,74 +1406,76 @@ elif page == "📋 İzleme Listesi":
             st.info("💡 src/local_watchlist.py dosyasının mevcut olduğundan emin olun.")
             st.stop()
     
-    if USE_LOCAL_WATCHLIST:
-        # Local watchlist kullan (JSON dosyası)
-        st.info("💡 İzleme listesi yerel olarak kaydediliyor (data/watchlist.json).")
-        
-        # Mevcut watchlist'i yükle
-        current_watchlist = get_watchlist()
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.subheader("📊 İzleme Listesi")
-            if current_watchlist:
-                # DataFrame oluştur
-                watchlist_data = []
-                for item in current_watchlist:
-                    watchlist_data.append({
-                        'Ticker': item.get('ticker', ''),
-                        'Şirket Adı': item.get('company_name', ''),
-                        'Eklenme Tarihi': item.get('added_date', '')[:10] if item.get('added_date') else ''
-                    })
-                watchlist_df = pd.DataFrame(watchlist_data)
-                st.dataframe(watchlist_df, width='stretch', use_container_width=True)
-            else:
-                st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
-        
-        with col2:
-            st.subheader("➕ Hisse Ekle")
-            new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker_local")
-            new_company = st.text_input("Şirket Adı (Opsiyonel)", value="", placeholder="Apple Inc.", key="new_company_local")
+    try:
+        if USE_LOCAL_WATCHLIST:
+            # Local watchlist kullan (JSON dosyası)
+            st.info("💡 İzleme listesi yerel olarak kaydediliyor (data/watchlist.json).")
             
-            if st.button("➕ Ekle", type="primary", key="add_local"):
-                if new_ticker:
-                    new_ticker = new_ticker.upper().strip()
-                    company_name = new_company.strip() if new_company else new_ticker
-                    
-                    if add_to_watchlist(new_ticker, company_name):
-                        st.success(f"✅ {new_ticker} ({company_name}) eklendi!")
-                        st.rerun()
-                    else:
-                        st.warning(f"⚠️ {new_ticker} zaten listede veya eklenemedi!")
+            # Mevcut watchlist'i yükle
+            current_watchlist = get_watchlist()
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.subheader("📊 İzleme Listesi")
+                if current_watchlist:
+                    # DataFrame oluştur
+                    watchlist_data = []
+                    for item in current_watchlist:
+                        watchlist_data.append({
+                            'Ticker': item.get('ticker', ''),
+                            'Şirket Adı': item.get('company_name', ''),
+                            'Eklenme Tarihi': item.get('added_date', '')[:10] if item.get('added_date') else ''
+                        })
+                    watchlist_df = pd.DataFrame(watchlist_data)
+                    st.dataframe(watchlist_df, width='stretch', use_container_width=True)
                 else:
-                    st.warning("⚠️ Lütfen bir ticker girin!")
+                    st.info("📝 Henüz izleme listesi oluşturulmamış. Sağdaki formdan ekleyin.")
             
-            # Silme
-            if current_watchlist:
-                st.subheader("🗑️ Hisse Sil")
-                ticker_options = [f"{item.get('ticker', '')} - {item.get('company_name', '')}" for item in current_watchlist]
-                selected = st.selectbox("Silinecek Ticker", ticker_options, key="remove_ticker_local")
-                ticker_to_remove = selected.split(' - ')[0] if selected else None
+            with col2:
+                st.subheader("➕ Hisse Ekle")
+                new_ticker = st.text_input("Borsa Kodu", value="", placeholder="THYAO, AAPL, ...", key="new_ticker_local")
+                new_company = st.text_input("Şirket Adı (Opsiyonel)", value="", placeholder="Apple Inc.", key="new_company_local")
                 
-                if st.button("🗑️ Sil", type="secondary", key="remove_local"):
-                    if ticker_to_remove and remove_from_watchlist(ticker_to_remove):
-                        st.success(f"✅ {ticker_to_remove} silindi!")
-                        st.rerun()
+                if st.button("➕ Ekle", type="primary", key="add_local"):
+                    if new_ticker:
+                        new_ticker = new_ticker.upper().strip()
+                        company_name = new_company.strip() if new_company else new_ticker
+                        
+                        if add_to_watchlist(new_ticker, company_name):
+                            st.success(f"✅ {new_ticker} ({company_name}) eklendi!")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ {new_ticker} zaten listede veya eklenemedi!")
                     else:
-                        st.error("❌ Silme hatası!")
-            
-            # Temizle
-            if current_watchlist:
-                if st.button("🗑️ Tümünü Temizle", type="secondary", key="clear_local"):
-                    clear_watchlist()
-                    st.success("✅ İzleme listesi temizlendi!")
-                    st.rerun()
-    
-    else:
-        # Firebase watchlist (fallback)
-        st.warning("⚠️ Local watchlist kullanılamıyor. Firebase watchlist kullanılıyor.")
-        # ... (mevcut Firebase kodu)
+                        st.warning("⚠️ Lütfen bir ticker girin!")
+                
+                # Silme
+                if current_watchlist:
+                    st.subheader("🗑️ Hisse Sil")
+                    ticker_options = [f"{item.get('ticker', '')} - {item.get('company_name', '')}" for item in current_watchlist]
+                    selected = st.selectbox("Silinecek Ticker", ticker_options, key="remove_ticker_local")
+                    ticker_to_remove = selected.split(' - ')[0] if selected else None
+                    
+                    if st.button("🗑️ Sil", type="secondary", key="remove_local"):
+                        if ticker_to_remove and remove_from_watchlist(ticker_to_remove):
+                            st.success(f"✅ {ticker_to_remove} silindi!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Silme hatası!")
+                
+                # Temizle
+                if current_watchlist:
+                    if st.button("🗑️ Tümünü Temizle", type="secondary", key="clear_local"):
+                        clear_watchlist()
+                        st.success("✅ İzleme listesi temizlendi!")
+                        st.rerun()
+        
+        else:
+            # Firebase watchlist (fallback)
+            st.warning("⚠️ Local watchlist kullanılamıyor. Firebase watchlist kullanılıyor.")
+            st.info("💡 Firebase watchlist özelliği için Google Cloud credentials gerekir.")
+            st.info("💡 Local watchlist kullanmak için src/local_watchlist.py dosyasının mevcut olduğundan emin olun.")
     
     except Exception as e:
         st.error(f"❌ İzleme listesi hatası: {str(e)}")

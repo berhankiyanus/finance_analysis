@@ -2,11 +2,13 @@
 Finansal Analiz Modülü
 
 Bu modül, fiyat verilerinden feature'lar çıkarır ve finansal skor hesaplar.
+Enflasyon muhasebesi ve sektör kıyaslaması özellikleri içerir.
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+from datetime import datetime, timedelta
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
@@ -1168,4 +1170,193 @@ if __name__ == "__main__":
     feature_vector_with_fund = create_feature_vector(price_df_with_features, fundamentals)
     financial_score_with_fund = compute_financial_score(feature_vector_with_fund)
     print(f"Finansal Sağlık Skoru (göstergelerle): {financial_score_with_fund:.2f}/100")
+
+
+def calculate_inflation_adjusted_metrics(
+    revenue_series: pd.Series,
+    inflation_series: pd.Series,
+    start_date: Optional[str] = None
+) -> Dict:
+    """
+    Enflasyondan arındırılmış finansal metrikler hesaplar.
+    
+    Türk borsası için kritik: Nominal büyüme yanıltıcı olabilir.
+    Reel büyüme = Nominal büyüme - Enflasyon
+    
+    Parametreler:
+    ------------
+    revenue_series : pd.Series
+        Gelir/ciro zaman serisi (tarih index'li)
+    inflation_series : pd.Series
+        Enflasyon zaman serisi (tarih index'li, yüzde olarak)
+    start_date : str, optional
+        Başlangıç tarihi (YYYY-MM-DD formatında)
+    
+    Döndürür:
+    --------
+    dict
+        {
+            'nominal_growth': float,  # Nominal büyüme oranı
+            'real_growth': float,    # Reel büyüme oranı (enflasyondan arındırılmış)
+            'inflation_impact': float,  # Enflasyon etkisi
+            'is_real_growth_positive': bool,  # Reel büyüme pozitif mi?
+            'inflation_adjusted_revenue': pd.Series  # Enflasyondan arındırılmış gelir serisi
+        }
+    """
+    # Tarih aralığını belirle
+    if start_date:
+        revenue_series = revenue_series[revenue_series.index >= start_date]
+        inflation_series = inflation_series[inflation_series.index >= start_date]
+    
+    # Serileri hizala (aynı tarihlerde)
+    common_dates = revenue_series.index.intersection(inflation_series.index)
+    if len(common_dates) < 2:
+        return {
+            'nominal_growth': 0.0,
+            'real_growth': 0.0,
+            'inflation_impact': 0.0,
+            'is_real_growth_positive': False,
+            'inflation_adjusted_revenue': revenue_series
+        }
+    
+    revenue_aligned = revenue_series.loc[common_dates]
+    inflation_aligned = inflation_series.loc[common_dates]
+    
+    # Nominal büyüme hesapla
+    nominal_growth = revenue_aligned.pct_change().mean() * 100  # Yüzde olarak
+    
+    # Enflasyon oranını hesapla (ortalama)
+    inflation_rate = inflation_aligned.mean() / 100  # Yüzdeyi ondalığa çevir
+    
+    # Reel büyüme = Nominal büyüme - Enflasyon
+    real_growth = nominal_growth - (inflation_rate * 100)
+    
+    # Enflasyondan arındırılmış gelir serisi (sabit fiyatlarla)
+    inflation_adjusted_revenue = revenue_aligned.copy()
+    base_inflation = inflation_aligned.iloc[0] / 100 if len(inflation_aligned) > 0 else 1.0
+    
+    for i, date in enumerate(inflation_adjusted_revenue.index):
+        if i > 0:
+            # Önceki döneme göre enflasyon farkını hesapla
+            inflation_factor = (1 + inflation_aligned.iloc[i] / 100) / (1 + inflation_aligned.iloc[i-1] / 100)
+            # Geliri enflasyon faktörüne böl (sabit fiyatlara çevir)
+            inflation_adjusted_revenue.iloc[i] = revenue_aligned.iloc[i] / (1 + inflation_aligned.iloc[i] / 100)
+    
+    return {
+        'nominal_growth': nominal_growth,
+        'real_growth': real_growth,
+        'inflation_impact': inflation_rate * 100,
+        'is_real_growth_positive': real_growth > 0,
+        'inflation_adjusted_revenue': inflation_adjusted_revenue
+    }
+
+
+def compare_with_sector_averages(ticker: str, sector: str, fundamentals: Dict) -> Dict:
+    """
+    Şirketin finansal rasyolarını sektör ortalamalarıyla kıyaslar.
+    
+    Parametreler:
+    ------------
+    ticker : str
+        Hisse kodu
+    sector : str
+        Sektör adı (örn: "Bankacılık", "Sanayi", "GYO")
+    fundamentals : dict
+        Şirket finansal göstergeleri
+    
+    Döndürür:
+    --------
+    dict
+        {
+            'pe_ratio': {'company': 15.0, 'sector_avg': 12.0, 'difference': 3.0, 'status': 'above'},
+            'pb_ratio': {...},
+            'debt_to_equity': {...},
+            'overall_sector_position': 'above_average'  # above_average, average, below_average
+        }
+    """
+    # Sektör ortalamaları (örnek veriler - gerçek uygulamada veritabanından çekilmeli)
+    sector_averages = {
+        'Bankacılık': {
+            'pe_ratio': 8.0,
+            'pb_ratio': 1.2,
+            'debt_to_equity': 0.8,
+            'profit_margin': 0.25
+        },
+        'Sanayi': {
+            'pe_ratio': 15.0,
+            'pb_ratio': 2.5,
+            'debt_to_equity': 0.6,
+            'profit_margin': 0.12
+        },
+        'GYO': {
+            'pe_ratio': 10.0,
+            'pb_ratio': 1.8,
+            'debt_to_equity': 0.4,
+            'profit_margin': 0.20
+        },
+        'Teknoloji': {
+            'pe_ratio': 25.0,
+            'pb_ratio': 4.0,
+            'debt_to_equity': 0.3,
+            'profit_margin': 0.15
+        }
+    }
+    
+    # Varsayılan sektör ortalamaları
+    default_sector_avg = {
+        'pe_ratio': 12.0,
+        'pb_ratio': 2.0,
+        'debt_to_equity': 0.5,
+        'profit_margin': 0.15
+    }
+    
+    sector_avg = sector_averages.get(sector, default_sector_avg)
+    
+    comparison = {}
+    above_count = 0
+    below_count = 0
+    
+    # Her göstergeyi kıyasla
+    for metric in ['pe_ratio', 'pb_ratio', 'debt_to_equity', 'profit_margin']:
+        company_value = fundamentals.get(metric, 0)
+        sector_value = sector_avg.get(metric, 0)
+        
+        if sector_value > 0:
+            difference = company_value - sector_value
+            difference_pct = (difference / sector_value) * 100 if sector_value > 0 else 0
+            
+            # Durum belirleme
+            if abs(difference_pct) < 10:  # %10'dan az fark = ortalama
+                status = 'average'
+            elif difference > 0:
+                status = 'above'
+                above_count += 1
+            else:
+                status = 'below'
+                below_count += 1
+        else:
+            difference = 0
+            difference_pct = 0
+            status = 'unknown'
+        
+        comparison[metric] = {
+            'company': company_value,
+            'sector_avg': sector_value,
+            'difference': difference,
+            'difference_pct': difference_pct,
+            'status': status
+        }
+    
+    # Genel sektör pozisyonu
+    if above_count > below_count:
+        overall_position = 'above_average'
+    elif below_count > above_count:
+        overall_position = 'below_average'
+    else:
+        overall_position = 'average'
+    
+    comparison['overall_sector_position'] = overall_position
+    comparison['sector'] = sector
+    
+    return comparison
 
