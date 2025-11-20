@@ -26,7 +26,8 @@ def generate_analyst_report(
     hisse_news_summary: str,
     piyasa_sentiment_score: float,
     piyasa_news_summary: str,
-    gemini_model=None
+    gemini_model=None,
+    historical_context: str = ""
 ) -> str:
     """
     Gemini API kullanarak otomatik analist raporu oluşturur.
@@ -92,6 +93,8 @@ HİSSE HABER ÖZETİ (AI): {hisse_news_summary}
 GENEL PİYASA DUYGU SKORU: {piyasa_sentiment_score:.2f} ({'Pozitif' if piyasa_sentiment_score > 0.6 else 'Negatif' if piyasa_sentiment_score < 0.4 else 'Nötr'})
 
 PİYASA HABER ÖZETİ (AI): {piyasa_news_summary}
+
+{historical_context if historical_context else ""}
 
 GÖREVİN:
 Yukarıdaki verileri kullanarak, {company_name} ({ticker}) hissesi için bugünün analiz bültenini yaz. 

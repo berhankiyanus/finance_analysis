@@ -205,6 +205,40 @@ def analyze_company(
     # Toplam sentiment skoru
     sentiment_score = aggregate_sentiment(news_df_with_sentiment)
     
+    # Siyasi analiz ve RAG (Tarihsel Hafıza) entegrasyonu
+    political_impact_score = None
+    historical_context = ""
+    
+    try:
+        from src.political_classifier import classify_news_political_impact
+        from src.vector_memory import HistoricalMemory
+        
+        # En son haberleri siyasi analiz için kullan
+        if not news_df_with_sentiment.empty:
+            latest_news = news_df_with_sentiment.iloc[0]
+            political_analysis = classify_news_political_impact(
+                news_text=latest_news.get('summary', ''),
+                news_title=latest_news.get('title', '')
+            )
+            
+            political_impact_score = political_analysis.get('political_impact_score', 0.0)
+            
+            # Eğer siyasi etki yüksekse, tarihsel hafızadan benzer olayları bul
+            if political_impact_score > 0.5:
+                memory = HistoricalMemory()
+                if memory.available:
+                    historical_context = memory.get_historical_context(
+                        current_news=latest_news.get('summary', ''),
+                        current_title=latest_news.get('title', ''),
+                        top_k=3
+                    )
+                    if historical_context:
+                        print(f"✅ Tarihsel hafızadan {len(historical_context.split('GEÇMİŞTE BENZER OLAYLAR')) - 1} benzer olay bulundu.")
+    except ImportError:
+        print("⚠️  Political classifier veya vector memory modülü bulunamadı.")
+    except Exception as e:
+        print(f"⚠️  Siyasi analiz/RAG hatası: {e}")
+    
     # Hisse bazlı ve piyasa geneli sentiment skorları (yeni özellik)
     try:
         hisse_duygu_skoru = analyze_stock_news(
@@ -262,7 +296,8 @@ def analyze_company(
         sentiment_score,
         financial_score,
         sentiment_weight=sentiment_weight,
-        financial_weight=financial_weight
+        financial_weight=financial_weight,
+        political_impact_score=political_impact_score
     )
     
     interpretation = interpret_score(overall_score)
@@ -303,7 +338,7 @@ def analyze_company(
         price_change_30d=price_change_30d
     )
     
-    # Detaylı rapor oluştur
+    # Detaylı rapor oluştur (historical_context ile)
     detailed_report = generate_detailed_report(
         company_name=company_name,
         ticker=ticker,
@@ -314,7 +349,8 @@ def analyze_company(
         interpretation=interpretation,
         direction_prediction=direction_prediction,
         feature_vector=feature_vector,
-        price_change_30d=price_change_30d
+        price_change_30d=price_change_30d,
+        historical_context=historical_context
     )
     
     # Sonuçları birleştir
@@ -334,7 +370,9 @@ def analyze_company(
         'feature_vector': feature_vector,
         'fundamentals': fundamentals,
         'summary': summary,
-        'detailed_report': detailed_report
+        'detailed_report': detailed_report,
+        'political_impact_score': political_impact_score,
+        'historical_context': historical_context
     }
     
     return results

@@ -585,10 +585,11 @@ elif page == "🏠 Ana Sayfa - Analiz":
                     
                     # Tabs yapısı - v4 yol haritası gereksinimi
                     try:
-                        tab_overview, tab_detailed, tab_news_report, tab_scenario, tab_portfolio = st.tabs([
+                        tab_overview, tab_detailed, tab_news_report, tab_faaliyet_raporu, tab_scenario, tab_portfolio = st.tabs([
                             "📊 Genel Bakış",
                             "📈 Detaylı Analiz",
                             "📰 Haberler & Rapor",
+                            "📄 Faaliyet Raporu",
                             "🎛️ Senaryo Analizi",
                             "💼 Portföy"
                         ])
@@ -637,6 +638,13 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         
                         # TAB 1: Genel Bakış
                         with tab_overview:
+                            # Siyasi/Ekonomik Risk Göstergesi
+                            if 'political_impact_score' in results and results.get('political_impact_score') is not None:
+                                political_score = results['political_impact_score']
+                                if political_score > 0.5:
+                                    st.warning(f"⚠️ **Yüksek Siyasi Etki Tespit Edildi:** {political_score:.1%}")
+                                    st.info("💡 Kriz zamanlarında teknik analiz etkisiz olabilir. Siyasi gelişmeleri yakından takip edin.")
+                            
                             # Skorlar - Gauge Chart ile
                             col_score1, col_score2, col_score3 = st.columns(3)
                         
@@ -1324,7 +1332,87 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         confidence_val = row.get('confidence', 0.0)
                                         st.write(f"**Sentiment:** {sentiment_val.upper()} ({confidence_val:.1%} güven)")
                         
-                        # TAB 4: Senaryo Analizi (What-If)
+                        # TAB 4: Faaliyet Raporu Analizi
+                        with tab_faaliyet_raporu:
+                            st.subheader("📄 Faaliyet Raporu Analizi")
+                            st.info("💡 KAP'tan indirilen faaliyet raporlarını otomatik analiz eder ve riskleri tespit eder.")
+                            
+                            try:
+                                from src.pdf_parser import PDFParser
+                                from src.kap_scraper import get_kap_financial_reports
+                                
+                                parser = PDFParser()
+                                
+                                if parser.available:
+                                    # Türk hissesi kontrolü
+                                    is_turkish_stock = ticker.endswith('.IS') or (len(ticker) == 5 and ticker.isalpha() and ticker.isupper())
+                                    
+                                    if is_turkish_stock:
+                                        ticker_clean = ticker.replace('.IS', '')
+                                        
+                                        # KAP raporlarını çek
+                                        st.write("**📥 KAP Raporları Çekiliyor...**")
+                                        kap_reports = get_kap_financial_reports(ticker_clean, limit=5)
+                                        
+                                        if kap_reports:
+                                            st.success(f"✅ {len(kap_reports)} KAP raporu bulundu.")
+                                            
+                                            # En son faaliyet raporunu analiz et
+                                            for report in kap_reports[:1]:  # İlk raporu analiz et
+                                                if 'link' in report and report['link']:
+                                                    st.write(f"**📄 Analiz Edilen Rapor:** {report.get('title', 'Bilinmiyor')}")
+                                                    
+                                                    with st.spinner("PDF analiz ediliyor..."):
+                                                        pdf_result = parser.parse_kap_pdf(
+                                                            kap_url=report['link'],
+                                                            report_title=report.get('title', '')
+                                                        )
+                                                        
+                                                        if pdf_result['success']:
+                                                            analysis = pdf_result.get('analysis', {})
+                                                            
+                                                            # Özet
+                                                            if analysis.get('summary'):
+                                                                st.subheader("📋 Rapor Özeti")
+                                                                st.write(analysis['summary'])
+                                                            
+                                                            # Riskler
+                                                            if analysis.get('risks'):
+                                                                st.subheader("⚠️ Önemli Riskler")
+                                                                for i, risk in enumerate(analysis['risks'], 1):
+                                                                    st.write(f"{i}. {risk}")
+                                                            
+                                                            # Fırsatlar
+                                                            if analysis.get('opportunities'):
+                                                                st.subheader("💡 Fırsatlar")
+                                                                for i, opp in enumerate(analysis['opportunities'], 1):
+                                                                    st.write(f"{i}. {opp}")
+                                                            
+                                                            # Önemli Metrikler
+                                                            if analysis.get('key_metrics'):
+                                                                st.subheader("📊 Önemli Metrikler")
+                                                                metrics = analysis['key_metrics']
+                                                                for key, value in metrics.items():
+                                                                    if value:
+                                                                        st.write(f"- **{key}:** {value}")
+                                                            
+                                                            # Yönetim Görünümü
+                                                            if analysis.get('management_outlook'):
+                                                                st.subheader("👔 Yönetim Görünümü")
+                                                                st.write(analysis['management_outlook'])
+                                                        else:
+                                                            st.warning(f"⚠️ PDF analiz edilemedi: {pdf_result.get('error', 'Bilinmeyen hata')}")
+                                        else:
+                                            st.info("ℹ️ KAP'tan rapor bulunamadı. Bu hisse için henüz faaliyet raporu yayınlanmamış olabilir.")
+                                    else:
+                                        st.info("ℹ️ Faaliyet raporu analizi şu an sadece Türk hisseleri için mevcuttur.")
+                            except ImportError:
+                                st.warning("⚠️ PDF parser modülü bulunamadı.")
+                            except Exception as e:
+                                st.error(f"❌ Faaliyet raporu analizi hatası: {str(e)}")
+                                st.exception(e)
+                        
+                        # TAB 5: Senaryo Analizi (What-If)
                         with tab_scenario:
                             st.subheader("🎛️ Senaryo Analizi (What-If)")
                             st.info("💡 Farklı makroekonomik senaryoların hisse fiyatına etkisini simüle edin.")

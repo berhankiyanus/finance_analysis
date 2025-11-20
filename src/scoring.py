@@ -22,7 +22,8 @@ def compute_overall_score(
     sentiment_score: float,
     financial_score: float,
     sentiment_weight: float = 0.4,
-    financial_weight: float = 0.6
+    financial_weight: float = 0.6,
+    political_impact_score: Optional[float] = None
 ) -> float:
     """
     Haber sentiment ve finansal skorları birleştirerek genel durum skoru hesaplar.
@@ -37,12 +38,21 @@ def compute_overall_score(
         Haber ağırlığı (varsayılan: 0.4)
     financial_weight : float
         Finansal ağırlık (varsayılan: 0.6)
+    political_impact_score : float, optional
+        0-1 arası siyasi etki skoru (eğer >0.8 ise ağırlıklar değişir)
     
     Döndürür:
     --------
     float
         0-100 arası genel durum skoru
     """
+    
+    # Siyasi etki skoru varsa ve yüksekse (kriz zamanı), ağırlıkları ayarla
+    if political_impact_score is not None and political_impact_score > 0.8:
+        # Kriz zamanlarında teknik analiz çalışmaz, siyasi analiz daha önemli
+        sentiment_weight = 0.6  # Artır
+        financial_weight = 0.4  # Azalt
+        print(f"⚠️  Yüksek siyasi etki tespit edildi ({political_impact_score:.2f}). Ağırlıklar ayarlandı.")
     
     # Ağırlıkların toplamı 1 olmalı
     total_weight = sentiment_weight + financial_weight
@@ -55,6 +65,14 @@ def compute_overall_score(
     # Ağırlıklı ortalama
     overall_score = (sentiment_score * sentiment_weight + 
                      financial_score * financial_weight)
+    
+    # Siyasi etki skoru varsa, sentiment skorunu etkile
+    if political_impact_score is not None:
+        # Siyasi etki skoru sentiment skorunu modüle eder
+        # Yüksek siyasi etki = sentiment skorunun etkisi artar
+        political_modifier = 1.0 + (political_impact_score * 0.3)  # Max %30 artış
+        overall_score = (sentiment_score * sentiment_weight * political_modifier + 
+                         financial_score * financial_weight)
     
     # 0-100 arasına sınırla
     overall_score = max(0, min(100, overall_score))
@@ -203,7 +221,8 @@ def generate_detailed_report(
     interpretation: Dict[str, str],
     direction_prediction: Dict[str, any],
     feature_vector: Dict,
-    price_change_30d: Optional[float] = None
+    price_change_30d: Optional[float] = None,
+    historical_context: str = ""
 ) -> Dict[str, any]:
     """
     Detaylı analiz raporu oluşturur - hangi haberler ve faktörler yüzünden
@@ -642,7 +661,7 @@ def generate_detailed_report(
                     direction_map = {'up': 'AL', 'down': 'SAT', 'neutral': 'TUT'}
                     technical_signal = direction_map.get(direction_prediction.get('direction', 'neutral'), 'TUT')
                     
-                    # Gemini raporu oluştur
+                    # Gemini raporu oluştur (historical_context ile)
                     gemini_report = generate_analyst_report(
                         company_name=company_name,
                         ticker=ticker,
@@ -652,7 +671,8 @@ def generate_detailed_report(
                         hisse_news_summary=hisse_news_summary,
                         piyasa_sentiment_score=piyasa_sentiment,
                         piyasa_news_summary=piyasa_news_summary,
-                        gemini_model=gemini_model
+                        gemini_model=gemini_model,
+                        historical_context=historical_context
                     )
                     
                     report['gemini_analyst_report'] = gemini_report
