@@ -724,8 +724,53 @@ def predict_direction(
     if model_path is not None:
         try:
             from src.prediction_model import PriceDirectionPredictor
+            from src.gemini_reporting import explain_prediction_with_gemini
+            
             predictor = PriceDirectionPredictor(model_path=model_path)
             prediction = predictor.predict(feature_vector)
+            
+            # Eğer reason yoksa veya "Belirtilmemiş" ise, Gemini ile yorumlat
+            if not prediction.get('reason') or 'belirtilmemiş' in prediction.get('reason', '').lower():
+                try:
+                    # SHAP değerlerini al
+                    shap_explanation = predictor.explain_prediction_shap(feature_vector)
+                    top_features = shap_explanation.get('top_features', [])
+                    
+                    # Gemini modeli yükle
+                    gemini_model = None
+                    gemini_api_key = os.getenv('GEMINI_API_KEY')
+                    if gemini_api_key:
+                        try:
+                            import google.generativeai as genai
+                            genai.configure(api_key=gemini_api_key)
+                            model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+                            for model_name in model_names:
+                                try:
+                                    gemini_model = genai.GenerativeModel(model_name)
+                                    break
+                                except:
+                                    continue
+                        except:
+                            pass
+                    
+                    # Gemini ile yorumlat
+                    if gemini_model and top_features:
+                        ticker = feature_vector.get('ticker', 'HISSE')
+                        gemini_reason = explain_prediction_with_gemini(
+                            ticker=ticker,
+                            prediction=prediction.get('direction', 'neutral'),
+                            confidence=prediction.get('confidence', 0.5),
+                            top_features=top_features,
+                            gemini_model=gemini_model
+                        )
+                        if gemini_reason and 'yorum oluşturulamadı' not in gemini_reason.lower():
+                            prediction['reason'] = gemini_reason
+                except Exception as gemini_error:
+                    print(f"⚠️  Gemini yorum hatası: {gemini_error}")
+                    # Fallback: Basit reason ekle
+                    if not prediction.get('reason'):
+                        prediction['reason'] = "ML modeli tahmini yaptı, ancak detaylı açıklama oluşturulamadı."
+            
             return prediction
         except Exception as e:
             print(f"⚠️  Model yükleme/tahmin hatası: {e}")

@@ -559,38 +559,54 @@ class PriceDirectionPredictor:
             # Tree-based modeller için TreeExplainer
             if self.model_type in ['random_forest', 'xgboost', 'lightgbm', 'gradient_boosting']:
                 explainer = shap.TreeExplainer(self.model)
-                shap_values = explainer.shap_values(X_scaled)
+                shap_values_all = explainer.shap_values(X_scaled)
                 
-                if self.task_type == "classification":
-                    # Multi-class için en yüksek sınıfın SHAP değerlerini al
-                    if isinstance(shap_values, list):
-                        # En yüksek olasılıklı sınıfı bul
-                        prediction_raw = self.model.predict(X_scaled)[0]
-                        # Numpy array'i scalar'a çevir
-                        if isinstance(prediction_raw, np.ndarray):
-                            prediction = int(prediction_raw.item())
-                        else:
-                            prediction = int(prediction_raw)
-                        class_idx = list(self.model.classes_).index(prediction)
-                        shap_values = shap_values[class_idx]
+                # --- DÜZELTME: SHAP çıktı formatı kontrolü ---
+                final_shap_values = None
+                
+                # Durum 1: Classification (Liste döner: [class0_shap, class1_shap, ...])
+                if isinstance(shap_values_all, list):
+                    # Tahmin edilen sınıfı bul
+                    prediction_raw = self.model.predict(X_scaled)[0]
                     
-                    # İlk örneği al - array ise ilk elemanı, zaten scalar ise direkt kullan
-                    if isinstance(shap_values, np.ndarray):
-                        if len(shap_values.shape) > 1:
-                            shap_values = shap_values[0]
-                        else:
-                            shap_values = shap_values
+                    # Numpy array'i scalar'a çevir
+                    if isinstance(prediction_raw, np.ndarray):
+                        prediction = prediction_raw.item()
                     else:
-                        shap_values = shap_values
+                        prediction = prediction_raw
+                    
+                    # Tahmin edilen sınıfın indexini bul
+                    if hasattr(self.model, 'classes_'):
+                        try:
+                            class_idx = list(self.model.classes_).index(prediction)
+                        except (ValueError, AttributeError):
+                            class_idx = 0  # Fallback
+                    else:
+                        class_idx = 0  # Fallback
+                    
+                    # İlgili sınıfın SHAP değerlerini al
+                    class_shap_values = shap_values_all[class_idx]
+                    
+                    # İlk örneği al (zaten tek örnek gönderdik)
+                    if isinstance(class_shap_values, np.ndarray):
+                        if len(class_shap_values.shape) > 1:
+                            final_shap_values = class_shap_values[0]
+                        else:
+                            final_shap_values = class_shap_values
+                    else:
+                        final_shap_values = class_shap_values
+                
+                # Durum 2: Regression veya Binary Classification (Tek array döner)
+                elif isinstance(shap_values_all, np.ndarray):
+                    if len(shap_values_all.shape) > 1:
+                        final_shap_values = shap_values_all[0]
+                    else:
+                        final_shap_values = shap_values_all
                 else:
-                    # Regression için direkt kullan
-                    if isinstance(shap_values, np.ndarray):
-                        if len(shap_values.shape) > 1:
-                            shap_values = shap_values[0]
-                        else:
-                            shap_values = shap_values
-                    else:
-                        shap_values = shap_values
+                    # Fallback: Scalar veya başka bir format
+                    final_shap_values = shap_values_all
+                
+                shap_values = final_shap_values
             else:
                 # Diğer modeller için KernelExplainer
                 if self.task_type == "classification":
@@ -603,19 +619,33 @@ class PriceDirectionPredictor:
                     background,
                     max_evals=max_evals
                 )
-                shap_values = explainer.shap_values(X_scaled[0])
+                shap_values_all = explainer.shap_values(X_scaled[0])
                 
+                # --- DÜZELTME: KernelExplainer için de aynı format kontrolü ---
                 if self.task_type == "classification":
                     # En yüksek olasılıklı sınıf için SHAP değerleri
-                    if isinstance(shap_values, list):
+                    if isinstance(shap_values_all, list):
                         prediction_raw = self.model.predict(X_scaled)[0]
                         # Numpy array'i scalar'a çevir
                         if isinstance(prediction_raw, np.ndarray):
-                            prediction = int(prediction_raw.item())
+                            prediction = prediction_raw.item()
                         else:
-                            prediction = int(prediction_raw)
-                        class_idx = list(self.model.classes_).index(prediction)
-                        shap_values = shap_values[class_idx]
+                            prediction = prediction_raw
+                        
+                        # Tahmin edilen sınıfın indexini bul
+                        if hasattr(self.model, 'classes_'):
+                            try:
+                                class_idx = list(self.model.classes_).index(prediction)
+                            except (ValueError, AttributeError):
+                                class_idx = 0  # Fallback
+                        else:
+                            class_idx = 0  # Fallback
+                        
+                        shap_values = shap_values_all[class_idx]
+                    else:
+                        shap_values = shap_values_all
+                else:
+                    shap_values = shap_values_all
         except Exception as e:
             print(f"⚠️  SHAP hesaplama hatası: {e}")
             # Fallback: Feature importance kullan

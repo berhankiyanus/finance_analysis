@@ -434,28 +434,57 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
     
     def _analyze_with_rules(self, text: str) -> Dict:
         """
-        Basit kural tabanlı sentiment analizi (fallback).
+        Geliştirilmiş kural tabanlı sentiment analizi (KAP bildirimlerini ayırt eder).
         """
         text_lower = text.lower()
         
-        # Pozitif kelimeler (daha kapsamlı liste)
+        # KAP bildirimi kontrolü (doğası gereği nötr olan başlıklar)
+        kap_neutral_keywords = [
+            'kap:', 'kap bildirimi', 'mali tablo', 'finansal rapor', 'faaliyet raporu',
+            'özel durum açıklaması', 'halka açıklama', 'borsa istanbul',
+            'tarih:', 'sayı:', 'konu:', 'bilanço', 'gelir tablosu',
+            'financial report', 'quarterly report', 'annual report',
+            'disclosure', 'announcement', 'public disclosure'
+        ]
+        
+        # Eğer KAP bildirimi gibi görünüyorsa ve içerik sadece başlık/format ise, nötr döndür
+        is_kap_like = any(keyword in text_lower for keyword in kap_neutral_keywords)
+        if is_kap_like and len(text.split()) < 30:  # Kısa ve formatlı metin
+            # Ama içinde gerçek haber içeriği varsa (kar, zarar, artış, düşüş) analiz et
+            has_content = any(word in text_lower for word in ['kar', 'zarar', 'artış', 'düşüş', 'büyüme', 'kriz'])
+            if not has_content:
+                return {
+                    'class': 'neutral',
+                    'confidence': 0.9,
+                    'probs': {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0},
+                    'note': 'KAP bildirimi formatı tespit edildi'
+                }
+        
+        # Pozitif kelimeler (Türkçe finansal terimler ağırlıklı)
         positive_words = [
-            'artış', 'yükseliş', 'büyüme', 'kâr', 'başarı', 'güçlü', 'iyi',
+            # Türkçe
+            'artış', 'yükseliş', 'büyüme', 'kâr', 'kar', 'başarı', 'güçlü', 'iyi',
             'olumlu', 'yükseldi', 'arttı', 'kazandı', 'başarılı', 'yükselme',
             'ilerleme', 'gelişme', 'iyileşme', 'kazanç', 'getiri', 'fayda',
             'avantaj', 'üstün', 'mükemmel', 'harika', 'süper', 'rekor',
+            'tavan', 'yükseliş', 'alım', 'onaylandı', 'anlaşma sağlandı',
+            'beklenti üstü', 'rekor kar', 'kar artışı', 'temettü',
+            # İngilizce
             'increase', 'growth', 'profit', 'success', 'strong', 'good',
             'positive', 'rose', 'gained', 'successful', 'up', 'gain',
             'improve', 'better', 'excellent', 'great', 'surge', 'rally',
             'boost', 'rise', 'climb', 'soar', 'jump', 'advance'
         ]
         
-        # Negatif kelimeler (daha kapsamlı liste)
+        # Negatif kelimeler (Türkçe finansal terimler ağırlıklı)
         negative_words = [
+            # Türkçe
             'düşüş', 'kayıp', 'zarar', 'zayıf', 'kötü', 'olumsuz', 'düştü',
             'azaldı', 'kaybetti', 'başarısız', 'risk', 'tehlike', 'düşme',
             'gerileme', 'kriz', 'sorun', 'problem', 'hata', 'başarısızlık',
-            'kayıp', 'zarar', 'zarar', 'kayıp', 'düşüş', 'düşme', 'azalma',
+            'beklenti altı', 'iptal', 'ceza', 'soruşturma', 'satış', 'iflas',
+            'erteleme', 'reddedildi',
+            # İngilizce
             'decrease', 'loss', 'weak', 'bad', 'negative', 'fell', 'declined',
             'lost', 'failed', 'risk', 'danger', 'down', 'drop', 'fall',
             'crash', 'plunge', 'sink', 'tumble', 'slump', 'downturn',
@@ -475,7 +504,7 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
         pos_score = pos_count / max(total_words, 10)  # En az 10 kelimeye normalize et
         neg_score = neg_count / max(total_words, 10)
         
-        # Sınıf belirle (daha düşük threshold)
+        # Sınıf belirle (daha düşük threshold - KAP bildirimleri hariç)
         if pos_count > 0 and pos_count >= neg_count:
             class_name = 'positive'
             confidence = min(0.85, 0.5 + (pos_count * 0.1))

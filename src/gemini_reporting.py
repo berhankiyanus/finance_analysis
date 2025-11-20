@@ -228,6 +228,81 @@ HABERLER:
         return _generate_simple_news_summary(news_headlines)
 
 
+def explain_prediction_with_gemini(
+    ticker: str,
+    prediction: str,
+    confidence: float,
+    top_features: List[tuple],
+    gemini_model=None
+) -> str:
+    """
+    Modelin tahminini Gemini kullanarak yorumlar.
+    
+    Parametreler:
+    ------------
+    ticker : str
+        Hisse kodu
+    prediction : str
+        Tahmin yönü ('up', 'down', 'neutral')
+    confidence : float
+        Güven skoru (0-1 arası)
+    top_features : list
+        En etkili feature'lar [(feature_name, shap_value), ...]
+    gemini_model
+        Gemini API modeli (eğer varsa)
+    
+    Döndürür:
+    --------
+    str
+        Tahmin nedeni açıklaması
+    """
+    if not gemini_model:
+        return "AI yorumu devre dışı."
+    
+    try:
+        # Feature'ları metne dök
+        features_text = "\n".join([f"- {name}: {val:.4f} etki" for name, val in top_features[:5]])
+        
+        # Yön metnini Türkçe'ye çevir
+        direction_map = {
+            'up': 'YÜKSELİŞ',
+            'down': 'DÜŞÜŞ',
+            'neutral': 'YATAY'
+        }
+        direction_tr = direction_map.get(prediction.lower(), prediction.upper())
+        
+        prompt = f"""
+Bir makine öğrenmesi modeli, {ticker} hissesi için şu tahmini yaptı:
+
+YÖN: {direction_tr}
+GÜVEN: %{confidence*100:.1f}
+
+Modelin kararında en etkili olan faktörler (SHAP değerleri):
+{features_text}
+
+Bir finans uzmanı olarak, bu teknik göstergelerin neden bu yönde bir tahmine yol açtığını 1-2 cümleyle açıkla.
+
+Örnek formatlar:
+- "RSI'ın aşırı satım bölgesinde olması ve Momentumun artışı, potansiyel bir tepki yükselişini işaret ediyor."
+- "Fiyatın 20 günlük ortalamanın altında olması ve yüksek volatilite, düşüş riskini artırıyor."
+
+Yanıtı doğrudan yaz, başka açıklama ekleme.
+"""
+        
+        response = gemini_model.generate_content(prompt)
+        explanation = response.text.strip()
+        
+        # Eğer JSON formatında gelirse extract et
+        if "```" in explanation:
+            explanation = explanation.split("```")[-1].strip()
+        
+        return explanation
+        
+    except Exception as e:
+        print(f"⚠️  Gemini tahmin açıklama hatası: {e}")
+        return f"Yorum oluşturulamadı: {str(e)}"
+
+
 def _generate_simple_news_summary(news_headlines: List[Dict]) -> str:
     """
     Basit haber özeti oluşturur.
