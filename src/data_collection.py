@@ -441,7 +441,31 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                         except Exception as kap_error:
                             print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
                 
-                # KAP da yoksa boş DataFrame döndür (dummy veri değil)
+                # KAP da yoksa Google News RSS'i dene
+                print(f"   🔄 KAP'tan veri yok, Google News RSS deneniyor...")
+                try:
+                    from src.google_search import get_google_news_rss
+                    rss_news = get_google_news_rss(f"{company_name} hisse", num_results=10)
+                    if rss_news and len(rss_news) > 0:
+                        print(f"   ✅ Google News RSS'ten {len(rss_news)} haber bulundu!")
+                        news_list = []
+                        for news_item in rss_news:
+                            news_list.append({
+                                'title': news_item.get('title', ''),
+                                'summary': news_item.get('snippet', ''),
+                                'content': news_item.get('snippet', ''),
+                                'published_at': news_item.get('date', datetime.now()),
+                                'source': news_item.get('source', 'Google News'),
+                                'url': news_item.get('link', ''),
+                                'relevance_score': 0.9
+                            })
+                        if news_list:
+                            news_df = pd.DataFrame(news_list)
+                            return news_df
+                except Exception as rss_error:
+                    print(f"   ⚠️  Google News RSS hatası: {rss_error}")
+                
+                # Hiçbir kaynak yoksa boş DataFrame döndür (dummy veri değil)
                 return pd.DataFrame(columns=['title', 'summary', 'content', 'published_at', 'source', 'url', 'relevance_score'])
             else:
                 print(f"⚠️  NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")

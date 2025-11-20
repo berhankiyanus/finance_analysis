@@ -2,16 +2,18 @@
 NLP / Sentiment Analizi Modülü
 
 Bu modül, haber metinlerine sentiment analizi uygular.
+Türkçe ve İngilizce metinler için özelleştirilmiş model desteği eklenmiştir.
 """
 
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Optional
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 import warnings
 import os
 import json
+import re
 warnings.filterwarnings('ignore')
 
 # Gemini API için
@@ -30,34 +32,47 @@ class SentimentAnalyzer:
     
     def __init__(self, model_name: str = "ProsusAI/finbert", use_gemini: bool = True):
         """
-        Sentiment analiz modelini yükler.
+        Sentiment analiz modellerini yükler (İngilizce ve Türkçe).
         
         Parametreler:
         ------------
         model_name : str
-            Hugging Face model adı
+            Hugging Face model adı (İngilizce için)
         use_gemini : bool
             Gemini API kullanılsın mı? (varsayılan: True)
         """
-        print(f"📥 Sentiment modeli yükleniyor: {model_name}...")
+        print("📥 Sentiment modelleri hazırlanıyor...")
         
-        # FinBERT modelini yükle
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.models = {}
+        
+        # 1. FinBERT (İngilizce Finansal Metinler için)
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            self.model.eval()  # Evaluation modu
-            
-            # GPU varsa kullan
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            self.model.to(self.device)
-            
-            print(f"✅ FinBERT modeli yüklendi. Cihaz: {self.device}")
-            
+            self.models['en'] = pipeline(
+                "text-classification", 
+                model="ProsusAI/finbert", 
+                device=0 if torch.cuda.is_available() else -1
+            )
+            print("✅ FinBERT (EN) yüklendi.")
         except Exception as e:
-            print(f"⚠️  FinBERT modeli yüklenemedi: {e}")
-            print("⚠️  Basit kural tabanlı sentiment kullanılacak.")
-            self.model = None
-            self.tokenizer = None
+            print(f"⚠️  FinBERT yüklenemedi: {e}")
+            self.models['en'] = None
+        
+        # 2. Türkçe Model (Genel Sentiment)
+        try:
+            self.models['tr'] = pipeline(
+                "text-classification", 
+                model="savasy/bert-base-turkish-sentiment-cased", 
+                device=0 if torch.cuda.is_available() else -1
+            )
+            print("✅ BERT-Turkish (TR) yüklendi.")
+        except Exception as e:
+            print(f"⚠️  Türkçe model yüklenemedi: {e}")
+            self.models['tr'] = None
+        
+        # Eski API uyumluluğu için
+        self.model = self.models.get('en')  # FinBERT pipeline
+        self.tokenizer = None  # Pipeline kullanıldığı için tokenizer'a gerek yok
         
         # Gemini API'yi yükle
         self.use_gemini = use_gemini and GEMINI_AVAILABLE
@@ -98,7 +113,7 @@ class SentimentAnalyzer:
     
     def analyze_sentiment(self, text: str) -> Dict:
         """
-        Tek bir metin için sentiment analizi yapar.
+        Tek bir metin için sentiment analizi yapar (çok dilli).
         
         Parametreler:
         ------------
@@ -120,22 +135,86 @@ class SentimentAnalyzer:
                 'probs': {'positive': 0.33, 'negative': 0.33, 'neutral': 0.34}
             }
         
-        # 1. Önce Gemini API'ye sor (daha iyi context anlama için)
+        # 1. Gemini varsa öncelikli kullan (En iyi anlama kapasitesi)
         if self.use_gemini and self.gemini_model is not None:
             gemini_result = self._analyze_with_gemini(text)
             if gemini_result:
-                # Gemini başarılı, sonucu kullan
                 return gemini_result
-            # Gemini başarısız olursa FinBERT'e geç
         
-        # 2. Gemini yoksa veya başarısız olduysa FinBERT kullan
-        if self.model is not None:
-            finbert_result = self._analyze_with_model(text)
-            return finbert_result
+        # 2. Dil tespiti ve Model kullanımı
+        lang = self._detect_language(text)
+        
+        if lang == 'tr':
+            return self._analyze_turkish(text)
         else:
-            # FinBERT de yoksa kural tabanlı sentiment (fallback)
-            print("⚠️  FinBERT modeli yüklenemedi, kural tabanlı analiz kullanılıyor.")
+            return self._analyze_english(text)
+    
+    def _detect_language(self, text: str) -> str:
+        """Basit dil tespiti (Türkçe karakterlere göre)."""
+        turkish_chars = set("çğıöşüÇĞİÖŞÜ")
+        if any(char in turkish_chars for char in text):
+            return 'tr'
+        return 'en'
+    
+    def _analyze_english(self, text: str) -> Dict:
+        """FinBERT ile İngilizce analiz."""
+        if self.models.get('en') is None:
             return self._analyze_with_rules(text)
+        
+        try:
+            result = self.models['en'](text[:512])[0]
+            label = result['label'].lower()
+            score = result['score']
+            
+            # FinBERT etiketleri: positive, negative, neutral
+            return {
+                'class': label,
+                'confidence': score,
+                'probs': {
+                    'positive': score if label == 'positive' else 0.0,
+                    'negative': score if label == 'negative' else 0.0,
+                    'neutral': score if label == 'neutral' else 0.0
+                }
+            }
+        except Exception as e:
+            print(f"⚠️  FinBERT analiz hatası: {e}")
+            return self._analyze_with_rules(text)
+    
+    def _analyze_turkish(self, text: str) -> Dict:
+        """Türkçe analiz (Model + Finansal Kurallar)."""
+        # Önce kural tabanlı kontrol (Finansal terimler için daha hassas)
+        rule_result = self._analyze_with_rules(text)
+        if rule_result['confidence'] > 0.7:
+            return rule_result
+        
+        # Model desteği (savasy/bert modeli 'positive'/'negative' döner)
+        if self.models.get('tr') is not None:
+            try:
+                result = self.models['tr'](text[:512])[0]
+                label = result['label'].lower()
+                score = result['score']
+                
+                # Label mapping (model çıktısına göre değişebilir)
+                if 'pos' in label or 'positive' in label:
+                    label = 'positive'
+                elif 'neg' in label or 'negative' in label:
+                    label = 'negative'
+                else:
+                    label = 'neutral'
+                
+                return {
+                    'class': label,
+                    'confidence': score,
+                    'probs': {
+                        'positive': score if label == 'positive' else 0.0,
+                        'negative': score if label == 'negative' else 0.0,
+                        'neutral': score if label == 'neutral' else 0.0
+                    }
+                }
+            except Exception as e:
+                print(f"⚠️  Türkçe model analiz hatası: {e}")
+        
+        return rule_result
     
     def _analyze_with_model(self, text: str) -> Dict:
         """
@@ -268,7 +347,8 @@ KRİTİK KURALLAR:
 1. NÖTR sınıfını MÜMKÜN OLDUĞUNCA AZ KULLAN. Sadece gerçekten hiçbir finansal etkisi olmayan, tamamen tarafsız haberler için nötr kullan.
 2. Eğer haber şirket hakkında herhangi bir pozitif veya negatif bilgi içeriyorsa (kâr, büyüme, zarar, düşüş vb.), MUTLAKA pozitif veya negatif olarak sınıflandır.
 3. Finansal sonuçlar, yatırımlar, iş geliştirmeleri, başarılar, sorunlar, kayıplar gibi konular MUTLAKA pozitif veya negatif olmalı, nötr olmamalı.
-4. Sadece gerçekten hiçbir finansal anlamı olmayan, tamamen bilgilendirici haberler için nötr kullan.
+4. KAP bildirimleri (bilanço hariç) genellikle nötrdür. Ancak kar artışı, zarar, büyüme gibi bilgiler varsa pozitif/negatif olarak sınıflandır.
+5. Sadece gerçekten hiçbir finansal anlamı olmayan, tamamen bilgilendirici haberler için nötr kullan.
 
 ÖNEMLİ: Haberi gerçekten oku ve anla. Sadece kelime eşleştirmesi yapma. Haberin gerçek anlamını ve finansal etkisini değerlendir. NÖTR sınıfını çok dikkatli kullan.
 
