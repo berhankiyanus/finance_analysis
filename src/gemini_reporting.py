@@ -262,8 +262,24 @@ if __name__ == "__main__":
         gemini_api_key = os.getenv('GEMINI_API_KEY')
         if gemini_api_key:
             genai.configure(api_key=gemini_api_key)
-            # Gemini 1.5 Flash modelini kullan (daha hızlı ve ücretsiz katmanda erişilebilir)
-            gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+            # Model isimlerini sırayla dene (en güncelden eskiye)
+            model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+            gemini_model = None
+            
+            for model_name in model_names:
+                try:
+                    gemini_model = genai.GenerativeModel(model_name)
+                    # Test et
+                    test_response = gemini_model.generate_content("Test")
+                    if test_response and test_response.text:
+                        print(f"✅ Gemini API yüklendi: {model_name}")
+                        break
+                except Exception as model_error:
+                    print(f"⚠️  {model_name} modeli çalışmadı: {model_error}")
+                    continue
+            
+            if gemini_model is None:
+                print("⚠️  Hiçbir Gemini modeli çalışmadı. Basit rapor kullanılacak.")
             
             print("1. Analist Raporu Test:")
             report = generate_analyst_report(

@@ -1,8 +1,9 @@
 """
 Google Search Entegrasyonu Modülü
 
-Piyasa haberlerini Google Search üzerinden çeker.
-Not: Google Custom Search API veya alternatif servisler kullanılabilir.
+Piyasa haberlerini Google News RSS Feed üzerinden çeker.
+Ücretsiz ve sınırsız kullanım için RSS Feed kullanılır.
+Google Custom Search API alternatif olarak kullanılabilir.
 """
 
 import requests
@@ -10,8 +11,18 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import json
 import os
+import urllib.parse
 from dotenv import load_dotenv
 from pathlib import Path
+
+# RSS Feed için feedparser kütüphanesi
+try:
+    import feedparser
+    FEEDPARSER_AVAILABLE = True
+except ImportError:
+    FEEDPARSER_AVAILABLE = False
+    print("⚠️  feedparser paketi yüklü değil. RSS Feed kullanılamayacak.")
+    print("   💡 Yüklemek için: pip install feedparser")
 
 # .env dosyasından API key'leri yükle
 project_root = Path(__file__).parent.parent.parent
@@ -22,10 +33,11 @@ load_dotenv(dotenv_path=env_path)
 def search_google_news(query: str, num_results: int = 10, 
                       api_key: Optional[str] = None,
                       search_engine_id: Optional[str] = None,
-                      use_custom_search: bool = True,
+                      use_custom_search: bool = False,
                       days_back: int = 7) -> List[Dict]:
     """
-    Google Search API kullanarak haber araması yapar.
+    Google News RSS Feed kullanarak haber araması yapar (ücretsiz ve sınırsız).
+    Google Custom Search API alternatif olarak kullanılabilir.
     
     Parametreler:
     ------------
@@ -34,11 +46,13 @@ def search_google_news(query: str, num_results: int = 10,
     num_results : int
         Kaç sonuç getirilecek (varsayılan: 10)
     api_key : str, optional
-        Google Custom Search API anahtarı
+        Google Custom Search API anahtarı (sadece use_custom_search=True ise)
     search_engine_id : str, optional
-        Google Custom Search Engine ID
+        Google Custom Search Engine ID (sadece use_custom_search=True ise)
     use_custom_search : bool
-        Google Custom Search API kullanılsın mı? (varsayılan: True)
+        Google Custom Search API kullanılsın mı? (varsayılan: False - RSS Feed kullanılır)
+    days_back : int
+        Kaç gün geriye gidilecek (RSS Feed için kullanılmaz, tüm sonuçlar gelir)
     
     Döndürür:
     --------
@@ -46,11 +60,19 @@ def search_google_news(query: str, num_results: int = 10,
         Her haber için dict: {'title', 'link', 'snippet', 'source', 'date'}
     """
     
+    # Önce RSS Feed dene (ücretsiz ve sınırsız)
+    if FEEDPARSER_AVAILABLE:
+        rss_results = _search_with_rss_feed(query, num_results)
+        if rss_results:
+            return rss_results
+    
+    # RSS başarısız olduysa veya feedparser yoksa Custom Search API dene
     if use_custom_search:
         return _search_with_custom_search_api(query, num_results, api_key, search_engine_id, days_back)
     else:
-        # Alternatif: DuckDuckGo veya başka bir servis
-        return _search_with_alternative(query, num_results)
+        # RSS başarısız olduysa dummy veri döndür
+        print("⚠️  RSS Feed başarısız oldu ve Custom Search API kullanılmıyor.")
+        return _get_dummy_search_results(query, num_results)
 
 
 def _search_with_custom_search_api(query: str, num_results: int,
@@ -134,19 +156,86 @@ def _search_with_custom_search_api(query: str, num_results: int,
         return _get_dummy_search_results(query, num_results)
 
 
-def _search_with_alternative(query: str, num_results: int) -> List[Dict]:
+def _search_with_rss_feed(query: str, num_results: int = 10) -> List[Dict]:
     """
-    Alternatif arama yöntemi (DuckDuckGo veya başka servisler).
+    Google News RSS Feed kullanarak haber araması yapar (ücretsiz ve sınırsız).
+    
+    Parametreler:
+    ------------
+    query : str
+        Arama sorgusu
+    num_results : int
+        Kaç sonuç getirilecek
+    
+    Döndürür:
+    --------
+    list
+        Her haber için dict: {'title', 'link', 'snippet', 'source', 'date'}
     """
+    
+    if not FEEDPARSER_AVAILABLE:
+        print("⚠️  feedparser paketi yüklü değil. RSS Feed kullanılamıyor.")
+        return []
+    
     try:
-        # DuckDuckGo kullanımı (örnek)
-        # Not: Gerçek implementasyon için duckduckgo-search veya benzeri kütüphane gerekebilir
-        print("⚠️  Alternatif arama yöntemi henüz implement edilmedi.")
-        print("   Google Custom Search API kullanmanız önerilir.")
-        return _get_dummy_search_results(query, num_results)
+        # Query'yi URL encode et
+        encoded_query = urllib.parse.quote(f"{query} hisse borsa")
+        
+        # Google News RSS Feed URL'i
+        # Türkçe haberler için: hl=tr-TR, gl=TR, ceid=TR:tr
+        rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=tr-TR&gl=TR&ceid=TR:tr"
+        
+        # RSS Feed'i parse et
+        feed = feedparser.parse(rss_url)
+        
+        if feed.bozo:
+            print(f"⚠️  RSS Feed parse hatası: {feed.bozo_exception}")
+            return []
+        
+        results = []
+        entries = feed.entries[:num_results]
+        
+        for entry in entries:
+            # Tarih bilgisini parse et
+            try:
+                published_date = datetime(*entry.published_parsed[:6]) if hasattr(entry, 'published_parsed') else datetime.now()
+            except:
+                published_date = datetime.now()
+            
+            # Kaynak bilgisini çıkar (link'ten veya source'dan)
+            source = 'Google News'
+            if hasattr(entry, 'source') and entry.source:
+                source = entry.source.get('title', 'Google News')
+            elif hasattr(entry, 'link'):
+                source = _extract_domain(entry.link)
+            
+            # Özet bilgisi (description veya summary)
+            snippet = ''
+            if hasattr(entry, 'summary'):
+                snippet = entry.summary
+            elif hasattr(entry, 'description'):
+                snippet = entry.description
+            
+            results.append({
+                'title': entry.title if hasattr(entry, 'title') else '',
+                'link': entry.link if hasattr(entry, 'link') else '',
+                'snippet': snippet,
+                'source': source,
+                'date': published_date
+            })
+        
+        if results:
+            print(f"✅ RSS Feed'ten '{query}' için {len(results)} haber bulundu.")
+        else:
+            print(f"⚠️  RSS Feed'ten '{query}' için haber bulunamadı.")
+        
+        return results
+        
     except Exception as e:
-        print(f"❌ Alternatif arama hatası: {e}")
-        return _get_dummy_search_results(query, num_results)
+        print(f"❌ RSS Feed hatası: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def _extract_domain(url: str) -> str:

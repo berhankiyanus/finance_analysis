@@ -10,6 +10,23 @@ import pandas as pd
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 import json
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+# .env dosyasından API key'leri yükle
+project_root = Path(__file__).parent.parent.parent
+env_path = project_root / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# EVDS kütüphanesi (opsiyonel)
+try:
+    import evds
+    EVDS_AVAILABLE = True
+except ImportError:
+    EVDS_AVAILABLE = False
+    print("ℹ️  evds paketi yüklü değil. Requests ile veri çekilecek.")
+    print("   💡 Daha kolay kullanım için: pip install evds")
 
 
 def get_tcmb_data(series_code: str, start_date: Optional[str] = None, 
@@ -40,22 +57,47 @@ def get_tcmb_data(series_code: str, start_date: Optional[str] = None,
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
     
+    # API key'i .env'den al (eğer parametre olarak verilmemişse)
+    if api_key is None:
+        api_key = os.getenv('TCMB_API_KEY') or os.getenv('EVDS_API_KEY')
+    
+    # EVDS kütüphanesi varsa kullan (daha kolay)
+    if EVDS_AVAILABLE and api_key:
+        try:
+            evds_client = evds.EVDS(api_key)
+            data = evds_client.get_data(
+                series=series_code,
+                startdate=start_date.replace('-', ''),
+                enddate=end_date.replace('-', '')
+            )
+            # EVDS kütüphanesi DataFrame döndürür
+            if isinstance(data, pd.DataFrame) and not data.empty:
+                print(f"✅ {series_code} için {len(data)} veri noktası çekildi (EVDS kütüphanesi).")
+                return data
+        except Exception as evds_error:
+            print(f"⚠️  EVDS kütüphanesi hatası: {evds_error}")
+            print("   Requests ile denenecek...")
+    
+    # EVDS kütüphanesi yoksa veya hata verdi, requests ile dene
     try:
-        # TCMB EVDS API endpoint
-        # Not: Gerçek API endpoint'i ve formatı TCMB dokümantasyonuna göre değişebilir
+        # TCMB EVDS API endpoint (doğru format)
         base_url = "https://evds2.tcmb.gov.tr/service/evds"
         
-        # API key varsa kullan
+        # API key zorunlu (TCMB EVDS API ücretsiz ama key gerektirir)
+        if not api_key:
+            print("⚠️  TCMB_API_KEY bulunamadı. Dummy veri kullanılıyor.")
+            print("   💡 TCMB EVDS API key almak için: https://evds2.tcmb.gov.tr/")
+            return _get_dummy_tcmb_data(series_code, start_date, end_date)
+        
+        # TCMB EVDS API formatı: series parametresi virgülle ayrılmış seri kodları
         params = {
             'series': series_code,
             'startDate': start_date.replace('-', ''),
             'endDate': end_date.replace('-', ''),
             'type': 'json',
+            'key': api_key,
             'aggregationTypes': 'avg'  # Ortalama
         }
-        
-        if api_key:
-            params['key'] = api_key
         
         response = requests.get(base_url, params=params, timeout=30)
         response.raise_for_status()

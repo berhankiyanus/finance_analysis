@@ -69,9 +69,25 @@ class SentimentAnalyzer:
                 gemini_api_key = os.getenv('GEMINI_API_KEY')
                 if gemini_api_key:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Flash modelini kullan (daha hızlı ve ücretsiz katmanda erişilebilir)
-                    self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-                    print("✅ Gemini API yüklendi ve yapılandırıldı.")
+                    # Model isimlerini sırayla dene (en güncelden eskiye)
+                    model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+                    self.gemini_model = None
+                    
+                    for model_name in model_names:
+                        try:
+                            self.gemini_model = genai.GenerativeModel(model_name)
+                            # Test et
+                            test_response = self.gemini_model.generate_content("Test")
+                            if test_response and test_response.text:
+                                print(f"✅ Gemini API yüklendi: {model_name}")
+                                break
+                        except Exception as model_error:
+                            print(f"⚠️  {model_name} modeli çalışmadı: {model_error}")
+                            continue
+                    
+                    if self.gemini_model is None:
+                        print("⚠️  Hiçbir Gemini modeli çalışmadı. Gemini API kullanılamayacak.")
+                        self.use_gemini = False
                 else:
                     print("⚠️  GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")
                     print("   💡 Gemini API key'i almak için: https://makersuite.google.com/app/apikey")

@@ -546,6 +546,21 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         
                         # Sonuçları göster
                         st.success("✅ Analiz tamamlandı!")
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"❌ Veri alınamadı: API bağlantı hatası")
+                        st.info("💡 Lütfen internet bağlantınızı kontrol edin ve birkaç dakika sonra tekrar deneyin.")
+                        st.exception(e)
+                        results = None
+                    except Exception as e:
+                        st.error(f"❌ Analiz sırasında hata oluştu")
+                        st.info("💡 Lütfen tekrar deneyin. Sorun devam ederse, hata detaylarını kontrol edin.")
+                        import traceback
+                        with st.expander("🔍 Hata Detayları"):
+                            st.code(traceback.format_exc(), language="python")
+                        results = None
+                    
+                    if results is None:
+                        st.stop()  # Hata durumunda devam etme
                         
                         # Tabs yapısı - v4 yol haritası gereksinimi
                         tab_overview, tab_detailed, tab_news_report, tab_portfolio = st.tabs([

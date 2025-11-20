@@ -63,6 +63,12 @@ ipywidgets>=8.0.0
 python-dotenv>=1.0.0
 tqdm>=4.65.0
 
+# RSS Feed (Google News için)
+feedparser>=6.0.10
+
+# TCMB EVDS API (Opsiyonel - daha kolay kullanım için)
+# evds>=0.1.0  # Yorum satırı: pip install evds ile yüklenebilir
+
 # Test (Opsiyonel)
 pytest>=7.4.0
 pytest-cov>=4.1.0

@@ -458,19 +458,25 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             if gemini_api_key:
                 try:
                     genai.configure(api_key=gemini_api_key)
-                    # Gemini 1.5 Flash modelini kullan (daha hızlı ve ücretsiz katmanda erişilebilir)
-                    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-                    # Gemini API'nin çalıştığını test et
-                    try:
-                        test_response = gemini_model.generate_content("Test: Sayı 1")
-                        if test_response and test_response.text:
-                            gemini_working = True
-                            print("✅ Gemini API çalışıyor ve hazır (relevance kontrolü için).")
-                        else:
-                            print("⚠️  Gemini API yanıt vermedi (test başarısız).")
-                    except Exception as test_error:
-                        print(f"⚠️  Gemini API test hatası: {test_error}")
-                        print("   Relevance kontrolü Gemini olmadan yapılacak.")
+                    # Model isimlerini sırayla dene (en güncelden eskiye)
+                    model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+                    gemini_model = None
+                    
+                    for model_name in model_names:
+                        try:
+                            gemini_model = genai.GenerativeModel(model_name)
+                            # Test et
+                            test_response = gemini_model.generate_content("Test: Sayı 1")
+                            if test_response and test_response.text:
+                                gemini_working = True
+                                print(f"✅ Gemini API çalışıyor: {model_name} (relevance kontrolü için).")
+                                break
+                        except Exception as model_error:
+                            print(f"⚠️  {model_name} modeli çalışmadı: {model_error}")
+                            continue
+                    
+                    if gemini_model is None:
+                        print("⚠️  Hiçbir Gemini modeli çalışmadı. Relevance kontrolü Gemini olmadan yapılacak.")
                 except Exception as e:
                     print(f"⚠️  Gemini API yapılandırılamadı: {e}")
             else:
