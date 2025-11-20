@@ -11,6 +11,14 @@ from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
 import os
+# typing import'u - Streamlit Cloud uyumluluğu için
+from typing import Dict, List, Any
+try:
+    from typing import Optional
+except (ImportError, NameError):
+    # Fallback: Optional yerine Union kullan
+    from typing import Union
+    Optional = lambda T: Union[T, None]
 from dotenv import load_dotenv
 
 # Proje kök dizinini path'e ekle
@@ -128,7 +136,7 @@ def cached_get_price_data(ticker: str, period: str = "1y"):
     return get_price_data(ticker, period)
 
 @st.cache_data(ttl=1800)  # 30 dakika cache - haber verisi
-def cached_get_news(company_name: str, days_back: int = 30, ticker: Optional[str] = None):
+def cached_get_news(company_name: str, days_back: int = 30, ticker=None):
     """
     Cache'lenmiş haber verisi çekme - NewsAPI ve RSS Feed'den.
     
@@ -630,8 +638,8 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         with tab_overview:
                             # Skorlar - Gauge Chart ile
                             col_score1, col_score2, col_score3 = st.columns(3)
-                            
-                            with col_score1:
+                        
+                        with col_score1:
                                 # Sentiment Skoru - Gauge Chart
                                 fig_sentiment_gauge = go.Figure(go.Indicator(
                                     mode="gauge+number+delta",
@@ -656,8 +664,8 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 ))
                                 fig_sentiment_gauge.update_layout(height=250)
                                 st.plotly_chart(fig_sentiment_gauge, use_container_width=True)
-                            
-                            with col_score2:
+                        
+                        with col_score2:
                                 # Finansal Skor - Gauge Chart
                                 fig_financial_gauge = go.Figure(go.Indicator(
                                     mode="gauge+number+delta",
@@ -682,8 +690,8 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 ))
                                 fig_financial_gauge.update_layout(height=250)
                                 st.plotly_chart(fig_financial_gauge, use_container_width=True)
-                            
-                            with col_score3:
+                        
+                        with col_score3:
                                 # Genel Durum Skoru - Gauge Chart
                                 score_color = "darkgreen" if results['overall_score'] >= 70 else "darkred" if results['overall_score'] < 30 else "darkorange"
                                 fig_overall_gauge = go.Figure(go.Indicator(
@@ -709,22 +717,22 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 ))
                                 fig_overall_gauge.update_layout(height=250)
                                 st.plotly_chart(fig_overall_gauge, use_container_width=True)
+                        
+                        # Yorum
+                        interpretation = results['interpretation']
+                        st.info(f"**{interpretation['category']}** - {interpretation['risk_level']}")
+                        st.write(interpretation['recommendation'])
+                        
+                        # Yön tahmini
+                        if 'direction_prediction' in results:
+                            pred = results['direction_prediction']
+                            direction_emoji = {"up": "📈", "down": "📉", "neutral": "➡️"}
+                            direction_tr = {"up": "YÜKSELİŞ", "down": "DÜŞÜŞ", "neutral": "NÖTR"}
                             
-                            # Yorum
-                            interpretation = results['interpretation']
-                            st.info(f"**{interpretation['category']}** - {interpretation['risk_level']}")
-                            st.write(interpretation['recommendation'])
-                            
-                            # Yön tahmini
-                            if 'direction_prediction' in results:
-                                pred = results['direction_prediction']
-                                direction_emoji = {"up": "📈", "down": "📉", "neutral": "➡️"}
-                                direction_tr = {"up": "YÜKSELİŞ", "down": "DÜŞÜŞ", "neutral": "NÖTR"}
-                                
-                                st.write(f"**Yön Tahmini:** {direction_emoji.get(pred.get('direction', 'neutral'), '❓')} "
+                            st.write(f"**Yön Tahmini:** {direction_emoji.get(pred.get('direction', 'neutral'), '❓')} "
                                        f"{direction_tr.get(pred.get('direction', 'neutral'), 'NÖTR')} "
-                                       f"({pred.get('confidence', 0):.1%} güven)")
-                            
+                                   f"({pred.get('confidence', 0):.1%} güven)")
+                        
                             # Hızlı fiyat grafiği (AL/SAT sinyalleri ile)
                             if not results['price_df'].empty:
                                 price_df = results['price_df']
@@ -846,7 +854,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 except Exception as e:
                                     st.info(f"ℹ️ Model açıklaması gösterilemedi: {str(e)}")
                             
-                            # Detaylı rapor
+                        # Detaylı rapor
                             if 'detailed_report' in results and results['detailed_report']:
                                 detailed_report = results['detailed_report']
                                 
@@ -879,111 +887,111 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         st.write(f"{i}. **{factor['type']}:** {factor['description']}")
                             
                             # Grafikler - Tabs ile organize edilmiş
-                            st.subheader("📈 Görselleştirmeler")
+                        st.subheader("📈 Görselleştirmeler")
+                        
+                        if not results['price_df'].empty:
+                            price_df = results['price_df']
                             
-                            if not results['price_df'].empty:
-                                price_df = results['price_df']
-                                
-                                # Tab'lar oluştur
-                                tab1, tab2, tab3, tab4 = st.tabs(["📊 Fiyat Grafiği", "🕯️ Candlestick", "📈 Teknik Göstergeler", "📰 Haber Analizi"])
-                                
-                                with tab1:
-                                    # Gelişmiş fiyat grafiği
-                                    fig = make_subplots(
-                                        rows=3, cols=1,
-                                        subplot_titles=('Fiyat Hareketi', 'Hacim', 'RSI (14)'),
-                                        vertical_spacing=0.08,
-                                        row_heights=[0.5, 0.25, 0.25],
-                                        shared_xaxes=True
-                                    )
-                                    
-                                    # Fiyat çizgisi
+                            # Tab'lar oluştur
+                            tab1, tab2, tab3, tab4 = st.tabs(["📊 Fiyat Grafiği", "🕯️ Candlestick", "📈 Teknik Göstergeler", "📰 Haber Analizi"])
+                            
+                            with tab1:
+                                # Gelişmiş fiyat grafiği
+                                fig = make_subplots(
+                                    rows=3, cols=1,
+                                    subplot_titles=('Fiyat Hareketi', 'Hacim', 'RSI (14)'),
+                                    vertical_spacing=0.08,
+                                    row_heights=[0.5, 0.25, 0.25],
+                                    shared_xaxes=True
+                                )
+                            
+                                # Fiyat çizgisi
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                        y=price_df['close'],
+                                        mode='lines',
+                                        name='Kapanış Fiyatı',
+                                        line=dict(color='#1f77b4', width=2),
+                                        hovertemplate='<b>%{fullData.name}</b><br>' +
+                                                      'Tarih: %{x}<br>' +
+                                                      'Fiyat: $%{y:.2f}<br>' +
+                                                      '<extra></extra>'
+                                    ),
+                                    row=1, col=1
+                                )
+                            
+                                # Hareketli ortalamalar
+                                if 'ma_20' in price_df.columns:
                                     fig.add_trace(
                                         go.Scatter(
                                             x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                            y=price_df['close'],
+                                            y=price_df['ma_20'],
                                             mode='lines',
-                                            name='Kapanış Fiyatı',
-                                            line=dict(color='#1f77b4', width=2),
-                                            hovertemplate='<b>%{fullData.name}</b><br>' +
-                                                          'Tarih: %{x}<br>' +
-                                                          'Fiyat: $%{y:.2f}<br>' +
-                                                          '<extra></extra>'
+                                            name='MA 20',
+                                            line=dict(color='orange', width=1.5, dash='dash'),
+                                            hovertemplate='<b>MA 20</b><br>Fiyat: $%{y:.2f}<extra></extra>'
                                         ),
                                         row=1, col=1
                                     )
-                                    
-                                    # Hareketli ortalamalar
-                                    if 'ma_20' in price_df.columns:
-                                        fig.add_trace(
-                                            go.Scatter(
-                                                x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                                y=price_df['ma_20'],
-                                                mode='lines',
-                                                name='MA 20',
-                                                line=dict(color='orange', width=1.5, dash='dash'),
-                                                hovertemplate='<b>MA 20</b><br>Fiyat: $%{y:.2f}<extra></extra>'
-                                            ),
-                                            row=1, col=1
-                                        )
-                                    
-                                    if 'ma_50' in price_df.columns:
-                                        fig.add_trace(
-                                            go.Scatter(
+                                
+                                if 'ma_50' in price_df.columns:
+                                    fig.add_trace(
+                                        go.Scatter(
                                                 x=price_df.index if 'date' not in price_df.columns else price_df['date'],
                                                 y=price_df['ma_50'],
                                                 mode='lines',
                                                 name='MA 50',
                                                 line=dict(color='purple', width=1.5, dash='dot'),
                                                 hovertemplate='<b>MA 50</b><br>Fiyat: $%{y:.2f}<extra></extra>'
-                                            ),
-                                            row=1, col=1
-                                        )
-                                    
-                                    # Hacim
+                                    ),
+                                    row=1, col=1
+                                )
+                            
+                                # Hacim
+                                fig.add_trace(
+                                    go.Bar(
+                                        x=price_df.index if 'date' not in price_df.columns else price_df['date'],
+                                        y=price_df['volume'],
+                                        name='Hacim',
+                                        marker_color='lightblue',
+                                        hovertemplate='<b>Hacim</b><br>%{y:,.0f}<extra></extra>'
+                                    ),
+                                    row=2, col=1
+                                )
+                                
+                                # RSI
+                                if 'rsi_14' in price_df.columns:
                                     fig.add_trace(
-                                        go.Bar(
+                                        go.Scatter(
                                             x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                            y=price_df['volume'],
-                                            name='Hacim',
-                                            marker_color='lightblue',
-                                            hovertemplate='<b>Hacim</b><br>%{y:,.0f}<extra></extra>'
+                                            y=price_df['rsi_14'],
+                                            mode='lines',
+                                            name='RSI (14)',
+                                            line=dict(color='red', width=2),
+                                            hovertemplate='<b>RSI</b><br>%{y:.2f}<extra></extra>'
                                         ),
-                                        row=2, col=1
+                                        row=3, col=1
                                     )
                                     
-                                    # RSI
-                                    if 'rsi_14' in price_df.columns:
-                                        fig.add_trace(
-                                            go.Scatter(
-                                                x=price_df.index if 'date' not in price_df.columns else price_df['date'],
-                                                y=price_df['rsi_14'],
-                                                mode='lines',
-                                                name='RSI (14)',
-                                                line=dict(color='red', width=2),
-                                                hovertemplate='<b>RSI</b><br>%{y:.2f}<extra></extra>'
-                                            ),
-                                            row=3, col=1
-                                        )
-                                        
-                                        # RSI seviyeleri (70 ve 30)
-                                        fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
-                                        fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
-                                    
-                                    fig.update_layout(
-                                        title=f'{company_name} ({ticker}) - Detaylı Fiyat Analizi',
-                                        height=800,
-                                        showlegend=True,
-                                        hovermode='x unified',
-                                        xaxis_rangeslider_visible=False
-                                    )
-                                    
-                                    fig.update_xaxes(title_text="Tarih", row=3, col=1)
-                                    fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
-                                    fig.update_yaxes(title_text="Hacim", row=2, col=1)
-                                    fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
-                                    
-                                    st.plotly_chart(fig, width='stretch', config={
+                                    # RSI seviyeleri (70 ve 30)
+                                    fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
+                                    fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
+                                
+                                fig.update_layout(
+                                    title=f'{company_name} ({ticker}) - Detaylı Fiyat Analizi',
+                                    height=800,
+                                    showlegend=True,
+                                    hovermode='x unified',
+                                    xaxis_rangeslider_visible=False
+                                )
+                                
+                                fig.update_xaxes(title_text="Tarih", row=3, col=1)
+                                fig.update_yaxes(title_text="Fiyat ($)", row=1, col=1)
+                                fig.update_yaxes(title_text="Hacim", row=2, col=1)
+                                fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
+                                
+                                st.plotly_chart(fig, width='stretch', config={
                                         'displayModeBar': True,
                                         'modeBarButtonsToAdd': ['pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d']
                                     })
@@ -1130,9 +1138,9 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                                 title='Haber Sentiment Dağılımı',
                                                 xaxis_title='Sentiment Sınıfı',
                                                 yaxis_title='Haber Sayısı',
-                                                height=300
-                                            )
-                                            
+                                height=300
+                            )
+                            
                                             st.plotly_chart(fig_sentiment, width='stretch')
                                         
                                         with col_news2:
@@ -1379,7 +1387,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                             )
                             
                             st.plotly_chart(fig_radar, width='stretch')
-                            
+                        
                     except Exception as e:
                         st.error(f"❌ Hata oluştu: {str(e)}")
                         st.exception(e)
