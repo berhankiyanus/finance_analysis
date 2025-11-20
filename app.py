@@ -561,8 +561,9 @@ elif page == "🏠 Ana Sayfa - Analiz":
                     
                     if results is None:
                         st.stop()  # Hata durumunda devam etme
-                        
-                        # Tabs yapısı - v4 yol haritası gereksinimi
+                    
+                    # Tabs yapısı - v4 yol haritası gereksinimi
+                    try:
                         tab_overview, tab_detailed, tab_news_report, tab_portfolio = st.tabs([
                             "📊 Genel Bakış",
                             "📈 Detaylı Analiz",
@@ -1265,7 +1266,7 @@ elif page == "🏠 Ana Sayfa - Analiz":
                             )
                             
                             st.plotly_chart(fig_radar, width='stretch')
-                        
+                            
                     except Exception as e:
                         st.error(f"❌ Hata oluştu: {str(e)}")
                         st.exception(e)
