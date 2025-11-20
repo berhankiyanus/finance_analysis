@@ -585,10 +585,11 @@ elif page == "🏠 Ana Sayfa - Analiz":
                     
                     # Tabs yapısı - v4 yol haritası gereksinimi
                     try:
-                        tab_overview, tab_detailed, tab_news_report, tab_portfolio = st.tabs([
+                        tab_overview, tab_detailed, tab_news_report, tab_scenario, tab_portfolio = st.tabs([
                             "📊 Genel Bakış",
                             "📈 Detaylı Analiz",
                             "📰 Haberler & Rapor",
+                            "🎛️ Senaryo Analizi",
                             "💼 Portföy"
                         ])
                         
@@ -1196,6 +1197,73 @@ elif page == "🏠 Ana Sayfa - Analiz":
                         with tab_news_report:
                             st.subheader("📰 Haberler & AI Raporu")
                             
+                            # Geçmiş Benzer Olaylar (RAG Mimarisi)
+                            try:
+                                from src.vector_memory import HistoricalMemory
+                                
+                                memory = HistoricalMemory()
+                                if memory.available and not news_df.empty:
+                                    with st.expander("🧠 Geçmiş Benzer Olaylar (Tarihsel Hafıza)", expanded=False):
+                                        st.info("💡 Bu bölüm, mevcut haberleri geçmişteki benzer olaylarla karşılaştırarak piyasa tepkisini öngörmeye çalışır.")
+                                        
+                                        # En son haberleri analiz et
+                                        if 'title' in news_df.columns and 'summary' in news_df.columns:
+                                            latest_news = news_df.iloc[0] if len(news_df) > 0 else None
+                                            
+                                            if latest_news is not None:
+                                                current_title = latest_news.get('title', '')
+                                                current_summary = latest_news.get('summary', '')
+                                                
+                                                if current_title or current_summary:
+                                                    similar_events = memory.find_similar_events(
+                                                        current_news=current_summary,
+                                                        current_title=current_title,
+                                                        top_k=5
+                                                    )
+                                                    
+                                                    if similar_events:
+                                                        st.subheader("📅 Benzer Geçmiş Olaylar")
+                                                        
+                                                        # Ortalama BIST100 değişimi
+                                                        avg_change = sum(e['bist100_change'] for e in similar_events) / len(similar_events)
+                                                        max_change = max(similar_events, key=lambda x: abs(x['bist100_change']))
+                                                        
+                                                        col1, col2, col3 = st.columns(3)
+                                                        with col1:
+                                                            st.metric("Ortalama BIST100 Değişimi", f"{avg_change:+.2f}%")
+                                                        with col2:
+                                                            st.metric("En Yüksek Etki", f"{max_change['bist100_change']:+.2f}%")
+                                                        with col3:
+                                                            st.metric("Benzer Olay Sayısı", len(similar_events))
+                                                        
+                                                        st.write("**Geçmiş Olaylar:**")
+                                                        for i, event in enumerate(similar_events, 1):
+                                                            change_color = "🟢" if event['bist100_change'] > 0 else "🔴" if event['bist100_change'] < 0 else "🟡"
+                                                            st.write(f"""
+{change_color} **{i}. {event['date']}** - {event['title'][:80]}...
+- **BIST100 Değişimi:** {event['bist100_change']:+.2f}%
+- **Benzerlik:** {event['similarity']:.1%}
+- **Kategori:** {event['category']}
+""")
+                                                        
+                                                        # Gemini bağlam metni
+                                                        context = memory.get_historical_context(
+                                                            current_news=current_summary,
+                                                            current_title=current_title,
+                                                            top_k=5
+                                                        )
+                                                        
+                                                        if context:
+                                                            with st.expander("🤖 AI Yorumu (Geçmiş Olaylara Dayalı)", expanded=False):
+                                                                st.code(context, language="text")
+                                                    else:
+                                                        st.info("ℹ️ Benzer geçmiş olay bulunamadı. Veritabanı henüz yeterince dolu olmayabilir.")
+                                                        st.info("💡 Geçmiş verileri yüklemek için: `src/vector_memory.py` dosyasındaki `populate_historical_data()` fonksiyonunu çalıştırın.")
+                            except ImportError:
+                                pass  # Vector memory modülü yoksa sessizce devam et
+                            except Exception as e:
+                                st.warning(f"⚠️ Tarihsel hafıza hatası: {str(e)}")
+                            
                             # Gemini AI Analist Raporu (eğer varsa)
                             if 'detailed_report' in results and results['detailed_report']:
                                 detailed_report = results['detailed_report']
@@ -1256,7 +1324,108 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         confidence_val = row.get('confidence', 0.0)
                                         st.write(f"**Sentiment:** {sentiment_val.upper()} ({confidence_val:.1%} güven)")
                         
-                        # TAB 4: Portföy
+                        # TAB 4: Senaryo Analizi (What-If)
+                        with tab_scenario:
+                            st.subheader("🎛️ Senaryo Analizi (What-If)")
+                            st.info("💡 Farklı makroekonomik senaryoların hisse fiyatına etkisini simüle edin.")
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**📊 Makroekonomik Parametreler**")
+                                
+                                # Faiz oranı değişimi
+                                interest_change = st.slider(
+                                    "Faiz Oranı Değişimi (%)",
+                                    min_value=-5.0,
+                                    max_value=5.0,
+                                    value=0.0,
+                                    step=0.25,
+                                    help="Faiz oranının kaç puan değişeceğini belirtin"
+                                )
+                                
+                                # Dolar/TL değişimi
+                                usd_change = st.slider(
+                                    "USD/TRY Değişimi (%)",
+                                    min_value=-20.0,
+                                    max_value=20.0,
+                                    value=0.0,
+                                    step=1.0,
+                                    help="Dolar/TL kurunun yüzde değişimini belirtin"
+                                )
+                                
+                                # Enflasyon değişimi
+                                inflation_change = st.slider(
+                                    "Enflasyon Değişimi (%)",
+                                    min_value=-5.0,
+                                    max_value=5.0,
+                                    value=0.0,
+                                    step=0.25,
+                                    help="Enflasyon oranının yüzde değişimini belirtin"
+                                )
+                            
+                            with col2:
+                                st.write("**📈 Senaryo Sonuçları**")
+                                
+                                # Mevcut fiyat
+                                if not results['price_df'].empty:
+                                    current_price = results['price_df'].iloc[-1]['close']
+                                    
+                                    # Basit korelasyon bazlı tahmin
+                                    is_turkish_stock = ticker.endswith('.IS') or (len(ticker) == 5 and ticker.isalpha() and ticker.isupper())
+                                    
+                                    if is_turkish_stock:
+                                        usd_impact = usd_change * 0.5
+                                    else:
+                                        usd_impact = -usd_change * 0.3
+                                    
+                                    interest_impact = -interest_change * 2.0
+                                    inflation_impact = -inflation_change * 0.5
+                                    
+                                    total_impact = usd_impact + interest_impact + inflation_impact
+                                    predicted_price = current_price * (1 + total_impact / 100)
+                                    
+                                    st.metric("Mevcut Fiyat", f"₺{current_price:.2f}" if is_turkish_stock else f"${current_price:.2f}")
+                                    st.metric("Tahmini Fiyat", f"₺{predicted_price:.2f}" if is_turkish_stock else f"${predicted_price:.2f}", 
+                                             delta=f"{total_impact:+.2f}%")
+                                    
+                                    with st.expander("📊 Etki Detayları", expanded=True):
+                                        st.write(f"""
+**USD/TRY Etkisi:** {usd_impact:+.2f}%
+- Dolar {usd_change:+.1f}% değişirse → Hisse {usd_impact:+.2f}% etkilenir
+
+**Faiz Etkisi:** {interest_impact:+.2f}%
+- Faiz {interest_change:+.1f} puan değişirse → Hisse {interest_impact:+.2f}% etkilenir
+
+**Enflasyon Etkisi:** {inflation_impact:+.2f}%
+- Enflasyon {inflation_change:+.1f}% değişirse → Hisse {inflation_impact:+.2f}% etkilenir
+
+**Toplam Etki:** {total_impact:+.2f}%
+""")
+                                        
+                                        if abs(total_impact) > 10:
+                                            st.warning("⚠️ **Yüksek Etki:** Bu senaryo hisse fiyatını önemli ölçüde etkileyebilir.")
+                                        
+                                        st.info("💡 **Not:** Bu tahminler basit korelasyon modellerine dayanmaktadır. Gerçek piyasa koşulları daha karmaşık olabilir.")
+                                    
+                                    fig_scenario = go.Figure()
+                                    fig_scenario.add_trace(go.Bar(
+                                        x=['USD/TRY', 'Faiz', 'Enflasyon', 'Toplam'],
+                                        y=[usd_impact, interest_impact, inflation_impact, total_impact],
+                                        marker_color=['blue', 'red', 'orange', 'green' if total_impact > 0 else 'red'],
+                                        text=[f"{x:+.2f}%" for x in [usd_impact, interest_impact, inflation_impact, total_impact]],
+                                        textposition='auto'
+                                    ))
+                                    fig_scenario.update_layout(
+                                        title='Senaryo Etkisi (%)',
+                                        yaxis_title='Fiyat Değişimi (%)',
+                                        height=400
+                                    )
+                                    st.plotly_chart(fig_scenario, use_container_width=True)
+                                else:
+                                    st.warning("⚠️ Fiyat verisi bulunamadı. Senaryo analizi yapılamıyor.")
+                        
+                        # TAB 5: Portföy
                         with tab_portfolio:
                             st.subheader("💼 Portföy Analizi")
                             st.info("💡 Bu hisseyi portföyünüze eklemek için 'Portföy Optimizasyonu' sayfasını kullanın.")

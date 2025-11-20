@@ -614,13 +614,20 @@ def compute_features(price_df: pd.DataFrame,
             else:
                 df['hisse_duygu_skoru'] = hisse_duygu_skoru.reindex(df.index).ffill()
             
-            # Hareketli ortalamalar
+            # Hareketli ortalamalar (3, 7, 14, 30 günlük)
             df['hisse_duygu_ma_3'] = df['hisse_duygu_skoru'].rolling(3).mean()
             df['hisse_duygu_ma_7'] = df['hisse_duygu_skoru'].rolling(7).mean()
             df['hisse_duygu_ma_14'] = df['hisse_duygu_skoru'].rolling(14).mean()
+            df['hisse_duygu_ma_30'] = df['hisse_duygu_skoru'].rolling(30).mean()
             
             # Trend (artış/azalış)
             df['hisse_duygu_trend'] = df['hisse_duygu_skoru'].diff()
+            
+            # Sentiment momentum (trend'in hızı)
+            df['hisse_duygu_momentum'] = df['hisse_duygu_trend'].rolling(3).mean()
+            
+            # Sentiment volatilitesi (duygu değişkenliği)
+            df['hisse_duygu_volatility'] = df['hisse_duygu_skoru'].rolling(7).std()
     
     # Piyasa duygu skoru (eğer verilmişse)
     if piyasa_duygu_skoru is not None:
@@ -632,13 +639,20 @@ def compute_features(price_df: pd.DataFrame,
             else:
                 df['piyasa_duygu_skoru'] = piyasa_duygu_skoru.reindex(df.index).ffill()
             
-            # Hareketli ortalamalar
+            # Hareketli ortalamalar (3, 7, 14, 30 günlük)
             df['piyasa_duygu_ma_3'] = df['piyasa_duygu_skoru'].rolling(3).mean()
             df['piyasa_duygu_ma_7'] = df['piyasa_duygu_skoru'].rolling(7).mean()
             df['piyasa_duygu_ma_14'] = df['piyasa_duygu_skoru'].rolling(14).mean()
+            df['piyasa_duygu_ma_30'] = df['piyasa_duygu_skoru'].rolling(30).mean()
             
             # Trend
             df['piyasa_duygu_trend'] = df['piyasa_duygu_skoru'].diff()
+            
+            # Sentiment momentum (trend'in hızı)
+            df['piyasa_duygu_momentum'] = df['piyasa_duygu_trend'].rolling(3).mean()
+            
+            # Sentiment volatilitesi (duygu değişkenliği)
+            df['piyasa_duygu_volatility'] = df['piyasa_duygu_skoru'].rolling(7).std()
     
     # Faiz oranı (eğer verilmişse)
     if faiz_orani is not None:
