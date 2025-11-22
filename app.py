@@ -60,6 +60,85 @@ GEMINI_API_KEY = load_api_key_from_streamlit_or_env(
 if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
+# Telegram Bot Key (opsiyonel)
+TELEGRAM_BOT_TOKEN = load_api_key_from_streamlit_or_env(
+    "TELEGRAM_BOT_TOKEN",
+    sidebar_label="Telegram Bot Token",
+    required=False
+)
+
+TELEGRAM_CHAT_ID = load_api_key_from_streamlit_or_env(
+    "TELEGRAM_CHAT_ID",
+    sidebar_label="Telegram Chat ID",
+    required=False
+)
+
+# Telegram uyarı ayarları (sidebar'da)
+if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    with st.sidebar.expander("🔔 Telegram Uyarıları", expanded=False):
+        try:
+            from src.notification_engine import get_notification_engine
+            
+            engine = get_notification_engine()
+            
+            st.info("💡 Kritik olaylardan anında haberdar olun!")
+            
+            # Mevcut uyarıları göster
+            current_alerts = engine.get_alerts(TELEGRAM_CHAT_ID)
+            if current_alerts:
+                st.subheader("📋 Mevcut Uyarılar")
+                for i, alert in enumerate(current_alerts):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{alert.get('ticker', 'N/A')}** - {alert.get('type', 'N/A')}")
+                        if alert.get('threshold'):
+                            st.caption(f"Eşik: {alert['threshold']}")
+                    with col2:
+                        if st.button("🗑️", key=f"remove_alert_{i}"):
+                            engine.remove_alert(TELEGRAM_CHAT_ID, alert.get('ticker', ''), i)
+                            st.rerun()
+            
+            # Yeni uyarı ekle
+            st.subheader("➕ Yeni Uyarı Ekle")
+            alert_ticker = st.text_input("Ticker", placeholder="THYAO", key="alert_ticker")
+            alert_type = st.selectbox(
+                "Uyarı Tipi",
+                ["sentiment", "rsi_oversold", "rsi_overbought", "price_change", "daily_summary"],
+                key="alert_type",
+                help="sentiment: Sentiment skoru eşik değeri, rsi_oversold: RSI < 30, rsi_overbought: RSI > 70, price_change: Fiyat değişimi, daily_summary: Günlük özet"
+            )
+            
+            threshold = None
+            if alert_type in ["sentiment", "price_change"]:
+                threshold = st.number_input(
+                    "Eşik Değeri",
+                    min_value=0.0,
+                    max_value=100.0 if alert_type == "sentiment" else 50.0,
+                    value=80.0 if alert_type == "sentiment" else 5.0,
+                    step=0.1,
+                    key="alert_threshold"
+                )
+            
+            if st.button("➕ Uyarı Ekle", key="add_alert"):
+                if alert_ticker:
+                    engine.add_alert(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        ticker=alert_ticker.upper(),
+                        alert_type=alert_type,
+                        threshold=threshold,
+                        enabled=True
+                    )
+                    st.success(f"✅ Uyarı eklendi: {alert_ticker.upper()}")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Lütfen ticker girin!")
+        except ImportError:
+            st.warning("⚠️ Notification engine bulunamadı.")
+        except Exception as e:
+            st.warning(f"⚠️ Telegram uyarı ayarları hatası: {e}")
+elif TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID:
+    st.sidebar.warning("⚠️ Telegram uyarıları için hem Bot Token hem de Chat ID gerekli.")
+
 # Yapılandırma doğrulama (Streamlit başlangıcında)
 config_valid = True
 config_results = {}
@@ -658,13 +737,15 @@ elif page == "🏠 Ana Sayfa - Analiz":
                     
                     # Tabs yapısı - v4 yol haritası gereksinimi
                     try:
-                        tab_overview, tab_detailed, tab_news_report, tab_faaliyet_raporu, tab_scenario, tab_portfolio = st.tabs([
+                        tab_overview, tab_detailed, tab_news_report, tab_faaliyet_raporu, tab_scenario, tab_portfolio, tab_time_travel, tab_pdf_chat = st.tabs([
                             "📊 Genel Bakış",
                             "📈 Detaylı Analiz",
                             "📰 Haberler & Rapor",
                             "📄 Faaliyet Raporu",
                             "🎛️ Senaryo Analizi",
-                            "💼 Portföy"
+                            "💼 Portföy",
+                            "🕐 Time Travel",
+                            "💬 PDF Chat"
                         ])
                         
                         # API key kontrolü ve uyarı - dummy veri kontrolü
@@ -1620,6 +1701,253 @@ elif page == "🏠 Ana Sayfa - Analiz":
                             # Portföy optimizasyonu linki
                             st.markdown("---")
                             st.markdown("**💡 İpucu:** Birden fazla hisse için portföy optimizasyonu yapmak için 'Portföy Optimizasyonu' sayfasına gidin.")
+                        
+                        # Time Travel Analysis Tab
+                        with tab_time_travel:
+                            st.subheader("🕐 Time Travel Analysis")
+                            st.info("💡 Geçmiş bir tarihe gidip o günkü analizi görün. 'Eğer o gün sistem çalışsaydı ne derdi?' sorusunu yanıtlar.")
+                            
+                            try:
+                                from src.time_travel import analyze_historical_date, compare_predictions_with_reality
+                                
+                                col1, col2 = st.columns([1, 1])
+                                
+                                with col1:
+                                    target_date = st.date_input(
+                                        "📅 Analiz Edilecek Tarih",
+                                        value=None,
+                                        min_value=pd.to_datetime("2015-01-01").date(),
+                                        max_value=pd.to_datetime("today").date(),
+                                        help="Geçmiş bir tarih seçin (2015'ten bugüne kadar)"
+                                    )
+                                
+                                with col2:
+                                    st.write("")  # Boşluk
+                                    st.write("")  # Boşluk
+                                    analyze_button = st.button("🕐 Analiz Et", type="primary")
+                                
+                                if analyze_button and target_date:
+                                    with st.spinner(f"🕐 {target_date} tarihindeki analiz yapılıyor..."):
+                                        try:
+                                            time_travel_results = analyze_historical_date(
+                                                ticker=ticker,
+                                                target_date=target_date.strftime("%Y-%m-%d"),
+                                                company_name=company_name
+                                            )
+                                            
+                                            st.success("✅ Time Travel Analysis tamamlandı!")
+                                            
+                                            # O günkü bilgileri göster
+                                            col_info1, col_info2, col_info3 = st.columns(3)
+                                            with col_info1:
+                                                st.metric(
+                                                    "O Günkü Fiyat",
+                                                    f"₺{time_travel_results['price_data']['close']:.2f}" if ticker.endswith('.IS') or len(ticker) == 5 else f"${time_travel_results['price_data']['close']:.2f}"
+                                                )
+                                            with col_info2:
+                                                st.metric(
+                                                    "Genel Skor",
+                                                    f"{time_travel_results['overall_score']:.1f}/100"
+                                                )
+                                            with col_info3:
+                                                st.metric(
+                                                    "Haber Sayısı",
+                                                    time_travel_results['news_count']
+                                                )
+                                            
+                                            # Skorlar
+                                            st.subheader("📊 O Günkü Skorlar")
+                                            col_score1, col_score2 = st.columns(2)
+                                            with col_score1:
+                                                st.metric("Sentiment Skoru", f"{time_travel_results['sentiment_score']:.1f}/100")
+                                            with col_score2:
+                                                st.metric("Finansal Skor", f"{time_travel_results['financial_score']:.1f}/100")
+                                            
+                                            # Tahmin
+                                            direction_pred = time_travel_results['direction_prediction']
+                                            direction_emoji = "🟢" if direction_pred.get('direction') == 'BUY' else "🔴" if direction_pred.get('direction') == 'SELL' else "🟡"
+                                            
+                                            st.subheader("🎯 O Günkü Tahmin")
+                                            st.markdown(f"""
+                                            **Yön:** {direction_emoji} {direction_pred.get('direction', 'HOLD')}  
+                                            **Güven:** {direction_pred.get('confidence', 0.5):.1%}
+                                            """)
+                                            
+                                            # Gerçek fiyat değişimleri ile karşılaştırma
+                                            if time_travel_results.get('future_changes'):
+                                                st.subheader("📈 Gerçek Fiyat Değişimleri")
+                                                
+                                                comparison = compare_predictions_with_reality(
+                                                    ticker=ticker,
+                                                    target_date=target_date.strftime("%Y-%m-%d"),
+                                                    prediction=time_travel_results
+                                                )
+                                                
+                                                if 'actual_direction' in comparison and comparison['actual_direction']:
+                                                    col_comp1, col_comp2, col_comp3 = st.columns(3)
+                                                    with col_comp1:
+                                                        st.metric("Tahmin", comparison['predicted_direction'])
+                                                    with col_comp2:
+                                                        st.metric("Gerçek", comparison['actual_direction'])
+                                                    with col_comp3:
+                                                        accuracy_emoji = "✅" if comparison['correct'] else "❌"
+                                                        st.metric("Doğruluk", f"{accuracy_emoji} {'Doğru' if comparison['correct'] else 'Yanlış'}")
+                                                    
+                                                    # 30 gün sonrası değişim
+                                                    if '30_day' in time_travel_results['future_changes']:
+                                                        change_30d = time_travel_results['future_changes']['30_day']['change_percent']
+                                                        st.metric(
+                                                            "30 Gün Sonrası Değişim",
+                                                            f"{change_30d:+.2f}%"
+                                                        )
+                                            
+                                            # O günkü haberler
+                                            if time_travel_results.get('news_df'):
+                                                st.subheader("📰 O Günkü Haberler")
+                                                with st.expander("Haberleri Görüntüle", expanded=False):
+                                                    for news in time_travel_results['news_df'][:10]:
+                                                        st.markdown(f"**{news.get('title', 'Başlık yok')}**")
+                                                        st.caption(f"📅 {news.get('published_at', 'Tarih yok')}")
+                                                        if news.get('url'):
+                                                            st.caption(f"🔗 [Link]({news.get('url')})")
+                                                        st.divider()
+                                            
+                                        except Exception as e:
+                                            st.error(f"❌ Time Travel Analysis hatası: {str(e)}")
+                                            st.exception(e)
+                                
+                                elif analyze_button and not target_date:
+                                    st.warning("⚠️ Lütfen bir tarih seçin!")
+                                
+                            except ImportError:
+                                st.warning("⚠️ Time Travel Analysis modülü bulunamadı. src/time_travel.py dosyasının mevcut olduğundan emin olun.")
+                        
+                        # PDF Chat Tab
+                        with tab_pdf_chat:
+                            st.subheader("💬 PDF Chat (RAG ile Sorgulama)")
+                            st.info("💡 Faaliyet raporlarına doğal dil ile soru sorun. Sistem PDF içeriğini analiz edip yanıt verir.")
+                            
+                            try:
+                                from src.pdf_chat import get_pdf_chat
+                                from src.pdf_parser import PDFParser
+                                
+                                pdf_chat = get_pdf_chat()
+                                
+                                if not pdf_chat.available:
+                                    st.warning("⚠️ PDF Chat kullanılamıyor. Gerekli kütüphaneler yüklü değil veya API key eksik.")
+                                    st.info("💡 Gerekli: GEMINI_API_KEY, sentence-transformers, chromadb")
+                                else:
+                                    # PDF listesi
+                                    pdf_list = pdf_chat.get_pdf_list()
+                                    
+                                    if pdf_list:
+                                        st.subheader("📄 Mevcut PDF'ler")
+                                        pdf_options = {f"{pdf['pdf_id']} - {pdf['metadata'].get('company_name', 'N/A')}": pdf['pdf_id'] for pdf in pdf_list}
+                                        selected_pdf = st.selectbox(
+                                            "PDF Seçin",
+                                            options=list(pdf_options.keys()),
+                                            help="Sorgulamak istediğiniz PDF'i seçin"
+                                        )
+                                        selected_pdf_id = pdf_options[selected_pdf] if selected_pdf else None
+                                    else:
+                                        st.info("📝 Henüz PDF eklenmemiş. KAP'tan PDF indirip ekleyebilirsiniz.")
+                                        selected_pdf_id = None
+                                    
+                                    # PDF ekleme (KAP'tan)
+                                    with st.expander("➕ PDF Ekle (KAP'tan)", expanded=False):
+                                        st.info("💡 KAP bildirimi linkinden PDF'i indirip sisteme ekleyin.")
+                                        
+                                        kap_url = st.text_input(
+                                            "KAP Bildirimi URL'si",
+                                            placeholder="https://www.kap.org.tr/tr/Bildirim/...",
+                                            help="KAP bildirimi sayfasının URL'si"
+                                        )
+                                        
+                                        report_title = st.text_input(
+                                            "Rapor Başlığı",
+                                            value="Faaliyet Raporu",
+                                            help="Rapor tipi (örn: Faaliyet Raporu, Mali Tablo)"
+                                        )
+                                        
+                                        if st.button("📥 PDF İndir ve Ekle"):
+                                            if kap_url:
+                                                with st.spinner("PDF indiriliyor ve analiz ediliyor..."):
+                                                    try:
+                                                        parser = PDFParser()
+                                                        pdf_result = parser.parse_kap_pdf(kap_url, report_title)
+                                                        
+                                                        if 'error' in pdf_result:
+                                                            st.error(f"❌ {pdf_result['error']}")
+                                                        else:
+                                                            # PDF'i chat'e ekle
+                                                            pdf_id = f"{ticker}_{report_title.lower().replace(' ', '_')}"
+                                                            pdf_text = pdf_result.get('extracted_text', '')
+                                                            
+                                                            if pdf_chat.add_pdf(
+                                                                pdf_id=pdf_id,
+                                                                pdf_text=pdf_text,
+                                                                metadata={
+                                                                    'ticker': ticker,
+                                                                    'company_name': company_name,
+                                                                    'report_title': report_title,
+                                                                    'kap_url': kap_url
+                                                                }
+                                                            ):
+                                                                st.success(f"✅ PDF eklendi: {pdf_id}")
+                                                                st.rerun()
+                                                            else:
+                                                                st.error("❌ PDF eklenemedi!")
+                                                    except Exception as e:
+                                                        st.error(f"❌ Hata: {str(e)}")
+                                                        st.exception(e)
+                                            else:
+                                                st.warning("⚠️ Lütfen KAP URL'si girin!")
+                                    
+                                    # Soru sorma
+                                    if selected_pdf_id:
+                                        st.markdown("---")
+                                        st.subheader("💬 PDF'e Soru Sor")
+                                        
+                                        question = st.text_area(
+                                            "Sorunuz",
+                                            placeholder="Örnek: Geçen seneki Ar-Ge harcaması ne kadar? Şirketin en büyük riski nedir?",
+                                            help="PDF içeriğine dayalı sorular sorun"
+                                        )
+                                        
+                                        if st.button("❓ Sor", type="primary"):
+                                            if question:
+                                                with st.spinner("🤔 PDF analiz ediliyor..."):
+                                                    try:
+                                                        answer_result = pdf_chat.ask_question(
+                                                            question=question,
+                                                            pdf_id=selected_pdf_id,
+                                                            context_chunks=5
+                                                        )
+                                                        
+                                                        if answer_result.get('error'):
+                                                            st.error(f"❌ {answer_result['answer']}")
+                                                        else:
+                                                            st.success("✅ Yanıt hazır!")
+                                                            
+                                                            # Yanıtı göster
+                                                            st.markdown("### 💡 Yanıt")
+                                                            st.markdown(answer_result['answer'])
+                                                            
+                                                            # İlgili bölümler
+                                                            if answer_result.get('relevant_chunks'):
+                                                                with st.expander("📄 İlgili Bölümler", expanded=False):
+                                                                    for i, chunk in enumerate(answer_result['relevant_chunks'][:3], 1):
+                                                                        st.markdown(f"**Bölüm {i}** (Benzerlik: {chunk['similarity']:.1%})")
+                                                                        st.markdown(chunk['text'][:500] + "...")
+                                                                        st.divider()
+                                                    except Exception as e:
+                                                        st.error(f"❌ Hata: {str(e)}")
+                                                        st.exception(e)
+                                            else:
+                                                st.warning("⚠️ Lütfen bir soru girin!")
+                                    
+                            except ImportError:
+                                st.warning("⚠️ PDF Chat modülü bulunamadı. src/pdf_chat.py dosyasının mevcut olduğundan emin olun.")
                         
                         # Haber listesi (ayrı bir bölüm - eski kod, artık tab_news_report içinde)
                         if False and not results['news_df'].empty and 'sentiment_class' in results['news_df'].columns:

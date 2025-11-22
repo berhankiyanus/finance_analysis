@@ -98,9 +98,25 @@ def analyze_company(
     # 1. VERİ TOPLAMA
     logger.info("1. Veri toplanıyor...")
     
-    # Haberler
+    # Haberler (cache ile)
     logger.info("Haberler çekiliyor...")
-    news_df = get_news(company_name, days_back=days_back, ticker=ticker)
+    try:
+        from src.cache_manager import get_cached_news, set_cached_news
+        cached_news = get_cached_news(company_name, ticker, days_back)
+        if cached_news:
+            logger.info("✅ Haberler cache'den alındı")
+            # DataFrame'e çevir
+            news_df = pd.DataFrame(cached_news)
+        else:
+            news_df = get_news(company_name, days_back=days_back, ticker=ticker)
+            # Cache'e kaydet
+            set_cached_news(company_name, ticker, news_df, days_back=days_back)
+    except ImportError:
+        # Cache modülü yoksa normal devam et
+        news_df = get_news(company_name, days_back=days_back, ticker=ticker)
+    except Exception as e:
+        logger.warning(f"Cache hatası, normal devam ediliyor: {e}")
+        news_df = get_news(company_name, days_back=days_back, ticker=ticker)
     
     # Dummy haber verisi kontrolü ve uyarı
     news_warning = None
@@ -113,9 +129,26 @@ def analyze_company(
     if news_warning:
         logger.warning(news_warning)
     
-    # Fiyat verisi
+    # Fiyat verisi (cache ile)
     logger.info("Fiyat verisi çekiliyor...")
-    price_df = get_price_data(ticker, period="1y")
+    try:
+        from src.cache_manager import get_cached_price_data, set_cached_price_data
+        cached_price = get_cached_price_data(ticker, period="1y")
+        if cached_price:
+            logger.info("✅ Fiyat verisi cache'den alındı")
+            price_df = pd.DataFrame(cached_price)
+            if 'date' in price_df.columns:
+                price_df['date'] = pd.to_datetime(price_df['date'])
+        else:
+            price_df = get_price_data(ticker, period="1y")
+            # Cache'e kaydet
+            set_cached_price_data(ticker, price_df, period="1y")
+    except ImportError:
+        # Cache modülü yoksa normal devam et
+        price_df = get_price_data(ticker, period="1y")
+    except Exception as e:
+        logger.warning(f"Cache hatası, normal devam ediliyor: {e}")
+        price_df = get_price_data(ticker, period="1y")
     
     # Fiyat verisi doğrulaması
     if not isinstance(price_df, pd.DataFrame):
@@ -395,6 +428,46 @@ def analyze_company(
         'warnings': [news_warning] if news_warning else [],
         'is_dummy_news': is_dummy_news
     }
+    
+    # Telegram uyarıları gönder (eğer ayarlanmışsa)
+    try:
+        from src.notification_engine import get_notification_engine
+        import os
+        
+        telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        if telegram_chat_id:
+            engine = get_notification_engine()
+            # RSI'yi feature_vector'den al
+            rsi = feature_vector.get('rsi', 50.0)
+            current_price = price_df.iloc[-1]['close'] if not price_df.empty else 0.0
+            price_change_30d = results.get('price_change_30d', 0.0)
+            
+            # Analiz sonuçlarına RSI ve fiyat bilgilerini ekle
+            analysis_results_for_notification = {
+                'sentiment_score': sentiment_score,
+                'financial_score': financial_score,
+                'overall_score': overall_score,
+                'rsi': rsi,
+                'current_price': current_price,
+                'price_change_30d': price_change_30d,
+                'direction_prediction': direction_prediction
+            }
+            
+            # Uyarıları kontrol et ve gönder
+            sent_count = engine.check_and_send_alerts(
+                chat_id=telegram_chat_id,
+                ticker=ticker,
+                company_name=company_name,
+                analysis_results=analysis_results_for_notification
+            )
+            
+            if sent_count > 0:
+                logger.info(f"✅ {sent_count} Telegram uyarısı gönderildi")
+    except ImportError:
+        # Notification engine yoksa sessizce devam et
+        pass
+    except Exception as e:
+        logger.warning(f"Telegram uyarı hatası: {e}")
     
     return results
 
