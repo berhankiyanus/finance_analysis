@@ -135,22 +135,27 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     # Eğer API key yoksa, dummy veri döndür (test amaçlı)
     # NOT: Üretimde bu yerine Exception fırlatılmalı, şimdilik backward compatibility için dummy data
     if api_key is None:
-        error_msg = (
-            "⚠️  KRİTİK: NEWS_API_KEY bulunamadı!\n"
-            "   Gerçek haber verisi alınamayacak, dummy (test) veri kullanılıyor.\n"
+        warning_msg = (
+            "⚠️ NEWS_API_KEY bulunamadı: dummy haber verisi kullanılıyor, skorlar güvenilir değil.\n"
+            "   Gerçek haber verisi alınamayacak. NewsAPI key ekleyip uygulamayı yeniden başlatın.\n"
             "   💡 Çözüm:\n"
             "   1. https://newsapi.org/ adresinden ücretsiz API key alın\n"
             "   2. Proje kök dizininde .env dosyası oluşturun\n"
             "   3. .env dosyasına şunu ekleyin: NEWS_API_KEY=your_api_key_here\n"
             "   4. Uygulamayı yeniden başlatın"
         )
-        logger.error(error_msg)
+        logger.warning(warning_msg)
         
         # Üretim modu kontrolü (opsiyonel: env var ile kontrol edilebilir)
         if os.getenv('REQUIRE_NEWS_API_KEY', 'false').lower() == 'true':
             raise ValueError("NEWS_API_KEY zorunlu ancak bulunamadı. Lütfen .env dosyasına ekleyin.")
         
-        return _get_dummy_news(company_name, days_back)
+        dummy_df = _get_dummy_news(company_name, days_back)
+        # DataFrame'e metadata ekle (downstream consumer'lar için)
+        dummy_df.attrs['warning'] = warning_msg
+        dummy_df.attrs['is_dummy_data'] = True
+        dummy_df.attrs['dummy_reason'] = 'missing_news_api_key'
+        return dummy_df
     
     # NewsAPI'den haber çek
     try:

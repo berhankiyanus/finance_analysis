@@ -102,6 +102,17 @@ def analyze_company(
     logger.info("Haberler çekiliyor...")
     news_df = get_news(company_name, days_back=days_back, ticker=ticker)
     
+    # Dummy haber verisi kontrolü ve uyarı
+    news_warning = None
+    is_dummy_news = False
+    if hasattr(news_df, 'attrs'):
+        news_warning = news_df.attrs.get('warning')
+        is_dummy_news = news_df.attrs.get('is_dummy_data', False)
+        if is_dummy_news:
+            logger.warning("⚠️ Dummy haber verisi kullanılıyor, skorlar güvenilir değil.")
+    if news_warning:
+        logger.warning(news_warning)
+    
     # Fiyat verisi
     logger.info("Fiyat verisi çekiliyor...")
     price_df = get_price_data(ticker, period="1y")
@@ -380,7 +391,9 @@ def analyze_company(
             'is_real': not dummy_price_data_detected,
             'row_count': len(price_df),
             'dummy_reasons': dummy_reasons if dummy_price_data_detected else []
-        }
+        },
+        'warnings': [news_warning] if news_warning else [],
+        'is_dummy_news': is_dummy_news
     }
     
     return results

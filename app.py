@@ -691,8 +691,15 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 is_dummy_data = True
                         
                         # Mesajları göster
-                        if is_dummy_data:
-                            st.warning("⚠️ **Dikkat:** Dummy (test) verisi kullanılıyor. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
+                        # Önce results'tan gelen uyarıları göster
+                        user_warnings = results.get('warnings', [])
+                        if user_warnings:
+                            for warn in user_warnings:
+                                st.warning(warn)
+                        
+                        # Dummy haber verisi kontrolü
+                        if is_dummy_data or results.get('is_dummy_news'):
+                            st.warning("⚠️ **Dikkat:** Dummy haber verisi kullanılıyor, skorlar güvenilir değil. NEWS_API_KEY bulunamadı veya API isteği başarısız oldu. Gerçek haberler için NewsAPI key ekleyin ve uygulamayı yeniden başlatın.")
                         elif news_count == 0 and NEWS_API_KEY is not None:
                             # KAP ve Google Search fallback'lerinin kullanıldığını belirt
                             st.warning("⚠️ **Uyarı:** NewsAPI'de seçilen periyotta haber bulunamadı. "
