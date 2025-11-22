@@ -1071,7 +1071,7 @@ def get_stock_data(ticker: str, period: str = "1y") -> pd.DataFrame:
     return get_price_data(ticker, period)
 
 
-def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
+def get_price_data(ticker: str, period: str = "1y", use_dummy_on_failure: bool = True) -> pd.DataFrame:
     """
     Şirket için fiyat verisi çeker.
     
@@ -1084,6 +1084,9 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         Borsa kodu (örn: "AAPL", "THYAO.IS", "KCHOL", "GARAN")
     period : str
         Veri periyodu (örn: "1mo", "3mo", "6mo", "1y", "2y", "5y")
+    use_dummy_on_failure : bool
+        True ise hata durumlarında dummy fiyat verisi döndürülür; False ise istisna fırlatılır.
+        Varsayılan: True (backward compatibility için)
     
     Döndürür:
     --------
@@ -1101,12 +1104,26 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         if len(ticker) == 5 and ticker.isalpha() and ticker.isupper():
             ticker_formatted = ticker + '.IS'
             is_turkish_stock = True
-            print(f"📊 Türk hissesi tespit edildi: {ticker} -> {ticker_formatted}")
+            logger.info(f"Türk hissesi tespit edildi: {ticker} -> {ticker_formatted}")
     
     try:
-        # yfinance ile veri çek
-        stock = yf.Ticker(ticker_formatted)
-        hist = stock.history(period=period)
+        # yfinance ile veri çek (timeout ile)
+        # Signal-based timeout (Unix/Linux için)
+        try:
+            signal.signal(signal.SIGALRM, lambda s, f: None)  # Timeout handler
+            signal.alarm(30)  # 30 saniye timeout
+        except (AttributeError, OSError):
+            # Windows'ta signal.SIGALRM yok, timeout olmadan devam et
+            pass
+        
+        try:
+            stock = yf.Ticker(ticker_formatted)
+            hist = stock.history(period=period)
+        finally:
+            try:
+                signal.alarm(0)  # Timeout'u iptal et
+            except (AttributeError, OSError):
+                pass
         
         # Eğer veri bulunamadıysa ve .IS eklenmemişse, .IS ekleyip tekrar dene
         if hist.empty and not is_turkish_stock and not ('.IS' in original_ticker or original_ticker.endswith('.IS')):
@@ -1114,12 +1131,19 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
             ticker_with_is = original_ticker + '.IS'
             logger.info(f"{original_ticker} için veri bulunamadı, {ticker_with_is} ile tekrar deneniyor...")
             
-            signal.alarm(30)  # Timeout ayarla
+            try:
+                signal.alarm(30)  # Timeout ayarla
+            except (AttributeError, OSError):
+                pass
+            
             try:
                 stock = yf.Ticker(ticker_with_is)
                 hist = stock.history(period=period)
             finally:
-                signal.alarm(0)
+                try:
+                    signal.alarm(0)
+                except (AttributeError, OSError):
+                    pass
             
             if not hist.empty:
                 ticker_formatted = ticker_with_is
@@ -1127,26 +1151,38 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
             else:
                 logger.warning(f"{original_ticker} ve {ticker_with_is} için veri bulunamadı.")
                 if use_dummy_on_failure:
-                    return _get_dummy_price_data(original_ticker), False
+                    logger.info("Dummy fiyat verisi kullanıldı (veri bulunamadı, alternatif ticker başarısız)")
+                    return _get_dummy_price_data(original_ticker)
                 else:
                     raise ValueError(f"Fiyat verisi bulunamadı: {original_ticker}")
         elif hist.empty:
             logger.warning(f"{ticker_formatted} için veri bulunamadı.")
             if use_dummy_on_failure:
-                return _get_dummy_price_data(original_ticker), False
+                logger.info("Dummy fiyat verisi kullanıldı (veri bulunamadı)")
+                return _get_dummy_price_data(original_ticker)
             else:
                 raise ValueError(f"Fiyat verisi bulunamadı: {ticker_formatted}")
         
         # Kolon isimlerini standartlaştır
         hist.reset_index(inplace=True)
-        hist.rename(columns={
-            'Date': 'date',
+        
+        # 'date' kolonunu bul (Date veya index olabilir)
+        if 'Date' in hist.columns:
+            hist.rename(columns={'Date': 'date'}, inplace=True)
+        elif hist.index.name == 'Date':
+            hist.reset_index(inplace=True)
+            if 'Date' in hist.columns:
+                hist.rename(columns={'Date': 'date'}, inplace=True)
+        
+        # Diğer kolonları rename et
+        rename_map = {
             'Open': 'open',
             'High': 'high',
             'Low': 'low',
             'Close': 'close',
             'Volume': 'volume'
-        }, inplace=True)
+        }
+        hist.rename(columns=rename_map, inplace=True)
         
         # Adjusted close ekle (eğer yoksa close'u kullan)
         if 'Adj Close' in hist.columns:
@@ -1154,8 +1190,28 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         else:
             hist['adjusted_close'] = hist['close']
         
+        # 'date' kolonu yoksa oluştur
+        if 'date' not in hist.columns:
+            if hist.index.name == 'Date' or 'Date' in str(hist.index):
+                hist.reset_index(inplace=True)
+                if 'Date' in hist.columns:
+                    hist.rename(columns={'Date': 'date'}, inplace=True)
+            else:
+                # Index'ten date oluştur
+                hist['date'] = hist.index if isinstance(hist.index, pd.DatetimeIndex) else pd.date_range(end=datetime.now(), periods=len(hist), freq='D')
+        
         # Sadece gerekli kolonları seç
-        price_df = hist[['date', 'open', 'high', 'low', 'close', 'volume', 'adjusted_close']].copy()
+        required_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'adjusted_close']
+        missing_cols = [col for col in required_cols if col not in hist.columns]
+        if missing_cols:
+            logger.warning(f"Eksik kolonlar: {missing_cols}, varsayılan değerlerle dolduruluyor...")
+            for col in missing_cols:
+                if col == 'date':
+                    hist[col] = pd.date_range(end=datetime.now(), periods=len(hist), freq='D')
+                else:
+                    hist[col] = 0.0
+        
+        price_df = hist[required_cols].copy()
         
         # Tarihi datetime'a çevir
         price_df['date'] = pd.to_datetime(price_df['date'])
@@ -1164,13 +1220,21 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         price_df.sort_values('date', inplace=True)
         price_df.reset_index(drop=True, inplace=True)
         
-        print(f"✅ {len(price_df)} günlük fiyat verisi çekildi.")
+        logger.info(f"{ticker_formatted} için {len(price_df)} günlük fiyat verisi çekildi.")
         return price_df
         
+    except (ValueError, TimeoutError) as e:
+        logger.error(f"Fiyat verisi çekilirken hata: {e}")
+        if use_dummy_on_failure:
+            logger.warning("Dummy fiyat verisi kullanıldı (hata yakalandı)")
+            return _get_dummy_price_data(original_ticker)
+        raise
     except Exception as e:
-        print(f"❌ Fiyat verisi çekilirken hata: {e}")
-        print("⚠️  Dummy veri kullanılıyor.")
-        return _get_dummy_price_data(ticker)
+        logger.exception(f"Fiyat verisi çekilirken beklenmeyen hata: {e}")
+        if use_dummy_on_failure:
+            logger.warning("Dummy fiyat verisi kullanıldı (hata yakalandı)")
+            return _get_dummy_price_data(original_ticker)
+        raise
 
 
 def _get_dummy_price_data(ticker: str) -> pd.DataFrame:

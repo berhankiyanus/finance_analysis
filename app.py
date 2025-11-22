@@ -61,17 +61,33 @@ if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
 # Yapılandırma doğrulama (Streamlit başlangıcında)
+config_valid = True
+config_results = {}
 try:
     from src.config_validator import ConfigValidator, validate_config_on_startup
     # Uygulama başlangıcında yapılandırmayı kontrol et
     try:
         result = validate_config_on_startup(raise_on_missing=False)
+        
         # Güvenli unpacking (eski versiyon uyumluluğu için)
-        if isinstance(result, tuple) and len(result) == 2:
+        if result is None:
+            # Fonksiyon None döndürdüyse (beklenmeyen durum)
+            config_valid = True
+            config_results = {}
+        elif isinstance(result, tuple) and len(result) == 2:
+            # Yeni versiyon: (bool, dict) tuple döndürüyor
             config_valid, config_results = result
-        else:
+        elif isinstance(result, bool):
             # Eski versiyon: sadece bool döndürüyor
-            config_valid = result if isinstance(result, bool) else True
+            config_valid = result
+            config_results = {}
+        elif isinstance(result, dict):
+            # Sadece dict döndürüyorsa (beklenmeyen durum)
+            config_valid = result.get('valid', True)
+            config_results = result
+        else:
+            # Bilinmeyen tip - güvenli varsayılan
+            config_valid = True
             config_results = {}
         
         if not config_valid or (config_results and config_results.get('missing_optional')):
@@ -82,8 +98,14 @@ try:
             except Exception:
                 pass  # Sidebar hatası sessizce atlanır
     except Exception as config_error:
-        # Yapılandırma doğrulama hatası (sessizce devam et)
-        pass
+        # Yapılandırma doğrulama hatası (sessizce devam et, uygulama çalışmaya devam etsin)
+        import traceback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Yapılandırma doğrulama hatası: {config_error}")
+        logger.debug(traceback.format_exc())
+        config_valid = True  # Hata durumunda varsayılan olarak geçerli kabul et
+        config_results = {}
 except ImportError:
     pass  # Config validator yoksa sessizce devam et
 except Exception as e:

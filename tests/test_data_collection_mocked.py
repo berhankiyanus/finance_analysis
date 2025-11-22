@@ -4,6 +4,7 @@ Data Collection Modülü Testleri (Mock'lu)
 Harici servis çağrılarını mock'lar, hızlı test sağlar.
 """
 
+import os
 import pytest
 import pandas as pd
 from unittest.mock import patch, Mock, MagicMock
@@ -52,11 +53,10 @@ class TestDataCollectionMocked:
         mock_ticker_class.return_value = mock_yfinance_ticker
         
         # Test
-        price_df, is_real = get_price_data('AAPL', period='1y', use_dummy_on_failure=False)
+        price_df = get_price_data('AAPL', period='1y', use_dummy_on_failure=False)
         
         # Assertions
         assert isinstance(price_df, pd.DataFrame)
-        assert is_real is True
         assert 'date' in price_df.columns
         assert 'close' in price_df.columns
         assert len(price_df) > 0
