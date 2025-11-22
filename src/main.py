@@ -106,6 +106,49 @@ def analyze_company(
     logger.info("Fiyat verisi çekiliyor...")
     price_df = get_price_data(ticker, period="1y")
     
+    # Fiyat verisi doğrulaması
+    if not isinstance(price_df, pd.DataFrame):
+        msg = "Fiyat verisi beklenen DataFrame formatında değil, analiz sonlandırılıyor."
+        logger.error(msg)
+        raise ValueError(msg)
+    
+    # Gerekli kolonları kontrol et
+    required_price_cols = {"date", "open", "high", "low", "close", "volume", "adjusted_close"}
+    missing_cols = required_price_cols - set(price_df.columns)
+    if missing_cols:
+        msg = f"Fiyat verisi eksik kolonlar içeriyor ({', '.join(sorted(missing_cols))}); analiz sonlandırılıyor."
+        logger.error(msg)
+        raise ValueError(msg)
+    
+    # Boş DataFrame kontrolü
+    if price_df.empty:
+        msg = "Fiyat verisi boş döndü; skor hesaplaması yapılamıyor."
+        logger.error(msg)
+        raise ValueError(msg)
+    
+    # Dummy veri tespiti
+    dummy_price_data_detected = False
+    dummy_reasons = []
+    
+    # Satır sayısı kontrolü: Dummy veri genellikle 100 satır, gerçek veri 250+ satır (1 yıl için)
+    if len(price_df) < 200:
+        dummy_price_data_detected = True
+        dummy_reasons.append(f"yetersiz satır sayısı ({len(price_df)} < 200)")
+    
+    # Tam olarak 100 satır ise şüpheli (dummy veri genellikle 100 satır)
+    if len(price_df) == 100:
+        dummy_price_data_detected = True
+        dummy_reasons.append("tam olarak 100 satır (dummy veri pattern'i)")
+    
+    # Volatilite kontrolü: Dummy veri genellikle çok düzenli bir pattern'e sahiptir
+    # Ancak bu kontrolü basit tutuyoruz, sadece satır sayısı yeterli
+    
+    if dummy_price_data_detected:
+        logger.warning(
+            "⚠️  Dummy veya yetersiz fiyat verisi tespit edildi (%s). Rapor düşük güvenle işaretlenecek.",
+            ", ".join(dummy_reasons)
+        )
+    
     # Finansal göstergeler (opsiyonel)
     fundamentals = None
     if use_fundamentals:
@@ -216,6 +259,14 @@ def analyze_company(
     # 3. FİNANSAL ANALİZ
     logger.info("📈 3. Finansal analiz yapılıyor...")
     
+    # Skor güven seviyesi belirleme
+    score_confidence = "normal"
+    if dummy_price_data_detected:
+        score_confidence = "low_due_to_dummy_price_data"
+        logger.warning(
+            "⚠️  Skor hesaplamaları dummy/yetersiz fiyat verisi nedeniyle düşük güvenle işaretleniyor."
+        )
+    
     # Hisse ve piyasa duygu skorlarını Series'e çevir (feature'lar için)
     # Her gün için aynı skoru kullan (basit yaklaşım)
     # İleride zaman serisi olarak geliştirilebilir
@@ -235,7 +286,10 @@ def analyze_company(
     # Finansal skor
     financial_score = compute_financial_score(feature_vector)
     
-    logger.info(f"✅ Finansal analiz tamamlandı. Skor: {financial_score:.2f}/100\n")
+    logger.info(f"✅ Finansal analiz tamamlandı. Skor: {financial_score:.2f}/100")
+    if score_confidence != "normal":
+        logger.info(f"   ⚠️  Güven Seviyesi: {score_confidence}")
+    logger.info("")
     
     # 4. SKORLAMA
     logger.info("🎯 4. Genel durum skoru hesaplanıyor...")
@@ -316,11 +370,17 @@ def analyze_company(
         'news_df': news_df_with_sentiment,
         'price_df': price_df_with_features,
         'feature_vector': feature_vector,
-        'fundamentals': fundamentals,
         'summary': summary,
         'detailed_report': detailed_report,
         'political_impact_score': political_impact_score,
-        'historical_context': historical_context
+        'historical_context': historical_context,
+        'score_confidence': score_confidence,
+        'dummy_price_data_detected': dummy_price_data_detected,
+        'price_data_quality': {
+            'is_real': not dummy_price_data_detected,
+            'row_count': len(price_df),
+            'dummy_reasons': dummy_reasons if dummy_price_data_detected else []
+        }
     }
     
     return results
