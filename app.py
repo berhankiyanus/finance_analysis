@@ -1834,30 +1834,74 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                         if len(kap_reports) >= 2:
                                             if st.button("🔍 Dil Değişimini Analiz Et", key="analyze_language_change"):
                                                 with st.spinner("Dil analizi yapılıyor..."):
-                                                    current_text = f"{kap_reports[0].get('title', '')} {kap_reports[0].get('type', '')}"
-                                                    previous_text = f"{kap_reports[1].get('title', '')} {kap_reports[1].get('type', '')}"
-                                                    
-                                                    analysis = analyze_language_change(
-                                                        current_report_text=current_text,
-                                                        previous_report_text=previous_text,
-                                                        gemini_model=gemini_model
-                                                    )
-                                                    
-                                                    if analysis.get('success'):
-                                                        result = analysis.get('analysis', {})
-                                                        tone_change = result.get('tone_change', 'similar')
-                                                        tone_emoji = {'more_concerned': '🔴', 'more_optimistic': '🟢', 'similar': '🟡'}
-                                                        st.write(f"{tone_emoji.get(tone_change, '⚪')} **Ton:** {tone_change}")
-                                                        if 'key_changes' in result:
-                                                            for change in result['key_changes']:
-                                                                st.write(f"- {change}")
-                                                        if 'red_flags' in result:
-                                                            for flag in result['red_flags']:
-                                                                st.warning(f"⚠️ {flag}")
+                                                    try:
+                                                        current_text = f"{kap_reports[0].get('title', '')} {kap_reports[0].get('type', '')}"
+                                                        previous_text = f"{kap_reports[1].get('title', '')} {kap_reports[1].get('type', '')}"
+                                                        
+                                                        analysis = analyze_language_change(
+                                                            current_report_text=current_text,
+                                                            previous_report_text=previous_text,
+                                                            gemini_model=gemini_model
+                                                        )
+                                                        
+                                                        if analysis and analysis.get('success'):
+                                                            result = analysis.get('analysis', {})
+                                                            if result:
+                                                                tone_change = result.get('tone_change', 'similar')
+                                                                tone_emoji = {'more_concerned': '🔴', 'more_optimistic': '🟢', 'similar': '🟡'}
+                                                                st.write(f"{tone_emoji.get(tone_change, '⚪')} **Ton Değişimi:** {tone_change}")
+                                                                
+                                                                if 'uncertainty_increase' in result:
+                                                                    st.metric("Belirsizlik Artışı", f"{result['uncertainty_increase']:.2%}")
+                                                                
+                                                                if 'key_changes' in result and result['key_changes']:
+                                                                    st.subheader("🔑 Önemli Değişiklikler")
+                                                                    for change in result['key_changes']:
+                                                                        st.write(f"- {change}")
+                                                                
+                                                                if 'red_flags' in result and result['red_flags']:
+                                                                    st.subheader("🚨 Kırmızı Bayraklar")
+                                                                    for flag in result['red_flags']:
+                                                                        st.warning(f"⚠️ {flag}")
+                                                                
+                                                                if 'summary' in result:
+                                                                    st.write(f"**Özet:** {result['summary']}")
+                                                            else:
+                                                                st.warning("⚠️ Analiz sonucu boş döndü.")
+                                                        else:
+                                                            error_msg = analysis.get('error', 'Bilinmeyen hata') if analysis else 'Analiz başarısız'
+                                                            st.warning(f"⚠️ Dil analizi başarısız: {error_msg}")
+                                                    except Exception as e:
+                                                        st.error(f"❌ Dil analizi hatası: {str(e)}")
+                                                        import traceback
+                                                        with st.expander("🔍 Hata Detayları"):
+                                                            st.code(traceback.format_exc(), language="python")
+                                        
+                                        # Kırmızı bayrak tespiti
+                                        st.subheader("🚨 Kırmızı Bayrak Tespiti")
+                                        try:
+                                            all_red_flags = []
+                                            for report in kap_reports[:5]:
+                                                flags = detect_red_flags(report.get('title', '') + ' ' + report.get('type', ''))
+                                                all_red_flags.extend(flags)
+                                            
+                                            if all_red_flags:
+                                                for flag in all_red_flags[:10]:
+                                                    st.warning(f"⚠️ {flag}")
+                                            else:
+                                                st.info("ℹ️ Kırmızı bayrak tespit edilmedi.")
+                                        except Exception as e:
+                                            st.warning(f"⚠️ Kırmızı bayrak tespiti hatası: {e}")
+                                    
                                     else:
                                         st.info("ℹ️ KAP bildirimi bulunamadı.")
+                            except ImportError:
+                                st.warning("⚠️ KAP Dedektifi modülü bulunamadı.")
                             except Exception as e:
                                 st.error(f"❌ KAP Dedektifi hatası: {e}")
+                                import traceback
+                                with st.expander("🔍 Hata Detayları"):
+                                    st.code(traceback.format_exc(), language="python")
                         
                         # TAB 8: Insider Trading
                         with tab_insider:
@@ -1869,32 +1913,51 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 
                                 if st.button("🔍 Insider Trading Analizini Çalıştır", key="run_insider_analysis"):
                                     with st.spinner("Insider trading analizi yapılıyor..."):
-                                        ticker_clean = ticker.replace('.IS', '')
-                                        insider_analysis = get_insider_trading_from_kap(ticker_clean, limit=20)
-                                        
-                                        if insider_analysis.get('success'):
-                                            insider_trades = insider_analysis.get('insider_trades', [])
-                                            sentiment = insider_analysis.get('sentiment', {})
+                                        try:
+                                            ticker_clean = ticker.replace('.IS', '')
+                                            insider_analysis = get_insider_trading_from_kap(ticker_clean, limit=20)
                                             
-                                            if insider_trades:
-                                                st.success(f"✅ {len(insider_trades)} insider trading işlemi tespit edildi.")
-                                                sentiment_score = sentiment.get('score', 0.0)
-                                                sentiment_type = sentiment.get('sentiment', 'neutral')
-                                                sentiment_emoji = {'very_positive': '🟢🟢', 'positive': '🟢', 'neutral': '🟡', 'negative': '🔴', 'very_negative': '🔴🔴'}
-                                                st.write(f"{sentiment_emoji.get(sentiment_type, '⚪')} **Sentiment:** {sentiment_type.upper()}")
-                                                st.metric("Sentiment Skoru", f"{sentiment_score:.2f}", 
-                                                        delta=f"{sentiment.get('buy_count', 0)} alım, {sentiment.get('sell_count', 0)} satım")
-                                                st.write(sentiment.get('message', ''))
+                                            if insider_analysis and insider_analysis.get('success'):
+                                                insider_trades = insider_analysis.get('insider_trades', [])
+                                                sentiment = insider_analysis.get('sentiment', {})
                                                 
-                                                for trade in insider_trades:
-                                                    action_emoji = {'BUY': '🟢', 'SELL': '🔴', 'UNKNOWN': '⚪'}
-                                                    with st.expander(f"{action_emoji.get(trade.get('action', 'UNKNOWN'), '⚪')} {trade.get('title', 'Başlık yok')}", expanded=False):
-                                                        st.write(f"**Tarih:** {trade.get('date', 'Bilinmiyor')}")
-                                                        st.write(f"**İşlem:** {trade.get('action', 'UNKNOWN')}")
-                                                        if trade.get('position'):
-                                                            st.write(f"**Pozisyon:** {trade.get('position')}")
+                                                if insider_trades:
+                                                    st.success(f"✅ {len(insider_trades)} insider trading işlemi tespit edildi.")
+                                                    sentiment_score = sentiment.get('score', 0.0)
+                                                    sentiment_type = sentiment.get('sentiment', 'neutral')
+                                                    sentiment_emoji = {'very_positive': '🟢🟢', 'positive': '🟢', 'neutral': '🟡', 'negative': '🔴', 'very_negative': '🔴🔴'}
+                                                    st.write(f"{sentiment_emoji.get(sentiment_type, '⚪')} **Sentiment:** {sentiment_type.upper()}")
+                                                    st.metric("Sentiment Skoru", f"{sentiment_score:.2f}", 
+                                                            delta=f"{sentiment.get('buy_count', 0)} alım, {sentiment.get('sell_count', 0)} satım")
+                                                    st.write(sentiment.get('message', ''))
+                                                    
+                                                    st.subheader("📋 Insider Trading İşlemleri")
+                                                    for trade in insider_trades:
+                                                        action_emoji = {'BUY': '🟢', 'SELL': '🔴', 'UNKNOWN': '⚪'}
+                                                        with st.expander(f"{action_emoji.get(trade.get('action', 'UNKNOWN'), '⚪')} {trade.get('title', 'Başlık yok')}", expanded=False):
+                                                            st.write(f"**Tarih:** {trade.get('date', 'Bilinmiyor')}")
+                                                            st.write(f"**İşlem:** {trade.get('action', 'UNKNOWN')}")
+                                                            if trade.get('position'):
+                                                                st.write(f"**Pozisyon:** {trade.get('position')}")
+                                                            if trade.get('amount'):
+                                                                st.write(f"**Miktar:** {trade.get('amount')}")
+                                                else:
+                                                    st.info("ℹ️ Insider trading işlemi bulunamadı.")
+                                            else:
+                                                error_msg = insider_analysis.get('error', 'Bilinmeyen hata') if insider_analysis else 'Analiz başarısız'
+                                                st.warning(f"⚠️ Insider trading analizi başarısız: {error_msg}")
+                                        except Exception as e:
+                                            st.error(f"❌ Insider trading analizi hatası: {str(e)}")
+                                            import traceback
+                                            with st.expander("🔍 Hata Detayları"):
+                                                st.code(traceback.format_exc(), language="python")
+                            except ImportError:
+                                st.warning("⚠️ Insider trading modülü bulunamadı.")
                             except Exception as e:
                                 st.error(f"❌ Insider trading hatası: {e}")
+                                import traceback
+                                with st.expander("🔍 Hata Detayları"):
+                                    st.code(traceback.format_exc(), language="python")
                         
                         # TAB 9: Portföy
                         with tab_portfolio:
@@ -1957,6 +2020,10 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                                 company_name=company_name
                                             )
                                             
+                                            if not time_travel_results:
+                                                st.error("❌ Time Travel Analysis sonuç döndürmedi. Lütfen tekrar deneyin.")
+                                                st.stop()
+                                            
                                             st.success("✅ Time Travel Analysis tamamlandı!")
                                             
                                             # O günkü bilgileri göster
@@ -1996,32 +2063,38 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                             """)
                                             
                                             # Gerçek fiyat değişimleri ile karşılaştırma
-                                            if time_travel_results.get('future_changes'):
-                                                st.subheader("📈 Gerçek Fiyat Değişimleri")
-                                                
-                                                comparison = compare_predictions_with_reality(
-                                                    ticker=ticker,
-                                                    target_date=target_date.strftime("%Y-%m-%d"),
-                                                    prediction=time_travel_results
-                                                )
-                                                
-                                                if 'actual_direction' in comparison and comparison['actual_direction']:
-                                                    col_comp1, col_comp2, col_comp3 = st.columns(3)
-                                                    with col_comp1:
-                                                        st.metric("Tahmin", comparison['predicted_direction'])
-                                                    with col_comp2:
-                                                        st.metric("Gerçek", comparison['actual_direction'])
-                                                    with col_comp3:
-                                                        accuracy_emoji = "✅" if comparison['correct'] else "❌"
-                                                        st.metric("Doğruluk", f"{accuracy_emoji} {'Doğru' if comparison['correct'] else 'Yanlış'}")
+                                            try:
+                                                if time_travel_results.get('future_changes'):
+                                                    st.subheader("📈 Gerçek Fiyat Değişimleri")
                                                     
-                                                    # 30 gün sonrası değişim
-                                                    if '30_day' in time_travel_results['future_changes']:
-                                                        change_30d = time_travel_results['future_changes']['30_day']['change_percent']
-                                                        st.metric(
-                                                            "30 Gün Sonrası Değişim",
-                                                            f"{change_30d:+.2f}%"
-                                                        )
+                                                    comparison = compare_predictions_with_reality(
+                                                        ticker=ticker,
+                                                        target_date=target_date.strftime("%Y-%m-%d"),
+                                                        prediction=time_travel_results
+                                                    )
+                                                    
+                                                    if comparison and 'actual_direction' in comparison and comparison['actual_direction']:
+                                                        col_comp1, col_comp2, col_comp3 = st.columns(3)
+                                                        with col_comp1:
+                                                            st.metric("Tahmin", comparison.get('predicted_direction', 'N/A'))
+                                                        with col_comp2:
+                                                            st.metric("Gerçek", comparison['actual_direction'])
+                                                        with col_comp3:
+                                                            accuracy_emoji = "✅" if comparison.get('correct', False) else "❌"
+                                                            st.metric("Doğruluk", f"{accuracy_emoji} {'Doğru' if comparison.get('correct', False) else 'Yanlış'}")
+                                                        
+                                                        # 30 gün sonrası değişim
+                                                        if '30_day' in time_travel_results.get('future_changes', {}):
+                                                            change_30d = time_travel_results['future_changes']['30_day'].get('change_percent', 0)
+                                                            st.metric(
+                                                                "30 Gün Sonrası Değişim",
+                                                                f"{change_30d:+.2f}%"
+                                                            )
+                                                    else:
+                                                        st.info("ℹ️ Gerçek fiyat değişimi karşılaştırması yapılamadı.")
+                                            except Exception as comp_error:
+                                                logger.warning(f"Karşılaştırma hatası: {comp_error}")
+                                                st.warning("⚠️ Gerçek fiyat değişimi karşılaştırması yapılamadı.")
                                             
                                             # O günkü haberler
                                             if time_travel_results.get('news_df'):
@@ -2036,7 +2109,11 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                             
                                         except Exception as e:
                                             st.error(f"❌ Time Travel Analysis hatası: {str(e)}")
-                                            st.exception(e)
+                                            import traceback
+                                            with st.expander("🔍 Hata Detayları"):
+                                                st.code(traceback.format_exc(), language="python")
+                                            logger.error(f"Time Travel Analysis hatası: {e}")
+                                            logger.error(traceback.format_exc())
                                 
                                 elif analyze_button and not target_date:
                                     st.warning("⚠️ Lütfen bir tarih seçin!")
@@ -2055,9 +2132,35 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 
                                 pdf_chat = get_pdf_chat()
                                 
-                                if not pdf_chat.available:
+                                if not pdf_chat or not pdf_chat.available:
                                     st.warning("⚠️ PDF Chat kullanılamıyor. Gerekli kütüphaneler yüklü değil veya API key eksik.")
+                                    
+                                    # Eksik kütüphaneleri kontrol et
+                                    missing_libs = []
+                                    try:
+                                        import google.generativeai as genai
+                                    except ImportError:
+                                        missing_libs.append("google-generativeai")
+                                    
+                                    try:
+                                        from sentence_transformers import SentenceTransformer
+                                    except ImportError:
+                                        missing_libs.append("sentence-transformers")
+                                    
+                                    try:
+                                        import chromadb
+                                    except ImportError:
+                                        missing_libs.append("chromadb")
+                                    
+                                    if missing_libs:
+                                        st.error(f"❌ Eksik kütüphaneler: {', '.join(missing_libs)}")
+                                        st.code(f"pip install {' '.join(missing_libs)}", language="bash")
+                                    
+                                    if not GEMINI_API_KEY:
+                                        st.error("❌ GEMINI_API_KEY eksik. .env dosyasına ekleyin.")
+                                    
                                     st.info("💡 Gerekli: GEMINI_API_KEY, sentence-transformers, chromadb")
+                                    st.stop()
                                 else:
                                     # PDF listesi
                                     pdf_list = pdf_chat.get_pdf_list()
