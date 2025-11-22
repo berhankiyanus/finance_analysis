@@ -16,7 +16,8 @@ def load_api_key_from_streamlit_or_env(
     key_name: str,
     sidebar_label: Optional[str] = None,
     required: bool = False,
-    default_value: Optional[str] = None
+    default_value: Optional[str] = None,
+    silent: bool = False
 ) -> Optional[str]:
     """
     API key'i Streamlit secrets veya .env dosyasından yükler.
@@ -31,6 +32,8 @@ def load_api_key_from_streamlit_or_env(
         Zorunlu mu? (True ise key yoksa hata gösterir)
     default_value : str, optional
         Varsayılan değer
+    silent : bool
+        True ise opsiyonel key'ler için bilgilendirme mesajları gösterilmez (varsayılan: False)
     
     Döndürür:
     --------
@@ -50,7 +53,7 @@ def load_api_key_from_streamlit_or_env(
         if hasattr(st, 'secrets') and key_name in st.secrets:
             api_key = st.secrets[key_name]
             os.environ[key_name] = api_key
-            if sidebar_label:
+            if sidebar_label and not silent:
                 st.sidebar.success(f"✅ {sidebar_label} Streamlit secrets'tan yüklendi")
             logger.info(f"{key_name} loaded from Streamlit secrets")
     except Exception as e:
@@ -65,21 +68,21 @@ def load_api_key_from_streamlit_or_env(
             load_dotenv(dotenv_path=env_path, override=False)
             api_key = os.getenv(key_name)
             if api_key:
-                if sidebar_label:
+                if sidebar_label and not silent:
                     st.sidebar.success(f"✅ {sidebar_label} .env dosyasından yüklendi")
                 logger.info(f"{key_name} loaded from .env file")
             else:
-                if sidebar_label and required:
+                if sidebar_label and required and not silent:
                     st.sidebar.warning(f"⚠️ .env dosyası var ama {sidebar_label} bulunamadı")
         else:
-            if sidebar_label and required:
+            if sidebar_label and required and not silent:
                 st.sidebar.warning(f"⚠️ .env dosyası bulunamadı")
     
     # 3. Environment variable'dan dene
     if api_key is None:
         api_key = os.getenv(key_name)
         if api_key:
-            if sidebar_label:
+            if sidebar_label and not silent:
                 st.sidebar.info(f"ℹ️ {sidebar_label} environment variable'dan yüklendi")
             logger.info(f"{key_name} loaded from environment variable")
     
@@ -92,13 +95,14 @@ def load_api_key_from_streamlit_or_env(
     if api_key:
         os.environ[key_name] = api_key
     elif required:
-        if sidebar_label:
+        if sidebar_label and not silent:
             st.sidebar.error(f"❌ {sidebar_label} bulunamadı! Lütfen Streamlit secrets veya .env dosyasına ekleyin.")
         logger.error(f"{key_name} not found and is required")
     else:
-        if sidebar_label:
+        # Opsiyonel key bulunamadı - sadece silent=False ise mesaj göster
+        if sidebar_label and not silent:
             st.sidebar.info(f"ℹ️ {sidebar_label} bulunamadı (opsiyonel)")
-        logger.info(f"{key_name} not found (optional)")
+        logger.debug(f"{key_name} not found (optional, silent={silent})")
     
     return api_key
 

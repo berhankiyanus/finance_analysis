@@ -60,17 +60,19 @@ GEMINI_API_KEY = load_api_key_from_streamlit_or_env(
 if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
-# Telegram Bot Key (opsiyonel)
+# Telegram Bot Key (opsiyonel - sessiz mod)
 TELEGRAM_BOT_TOKEN = load_api_key_from_streamlit_or_env(
     "TELEGRAM_BOT_TOKEN",
-    sidebar_label="Telegram Bot Token",
-    required=False
+    sidebar_label=None,  # Mesaj gösterme
+    required=False,
+    silent=True  # Opsiyonel key için sessiz mod
 )
 
 TELEGRAM_CHAT_ID = load_api_key_from_streamlit_or_env(
     "TELEGRAM_CHAT_ID",
-    sidebar_label="Telegram Chat ID",
-    required=False
+    sidebar_label=None,  # Mesaj gösterme
+    required=False,
+    silent=True  # Opsiyonel key için sessiz mod
 )
 
 # Telegram uyarı ayarları (sidebar'da)
@@ -136,8 +138,9 @@ if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
             st.warning("⚠️ Notification engine bulunamadı.")
         except Exception as e:
             st.warning(f"⚠️ Telegram uyarı ayarları hatası: {e}")
-elif TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID:
-    st.sidebar.warning("⚠️ Telegram uyarıları için hem Bot Token hem de Chat ID gerekli.")
+# Telegram uyarıları için hem token hem chat ID gerekli (sessiz mod - mesaj gösterme)
+# elif TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID:
+#     st.sidebar.warning("⚠️ Telegram uyarıları için hem Bot Token hem de Chat ID gerekli.")
 
 # Yapılandırma doğrulama (Streamlit başlangıcında)
 config_valid = True
