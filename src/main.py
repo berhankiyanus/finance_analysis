@@ -432,7 +432,7 @@ def analyze_company(
     # Telegram uyarıları gönder (eğer ayarlanmışsa)
     try:
         from src.notification_engine import get_notification_engine
-        import os
+        # os zaten dosyanın başında import edilmiş
         
         telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
         if telegram_chat_id:
