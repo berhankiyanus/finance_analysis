@@ -46,11 +46,18 @@ from src.logger_config import setup_logger
 logger = setup_logger(__name__)
 
 # Yapılandırma doğrulama (opsiyonel: uygulama başlangıcında)
-from src.config_validator import validate_config_on_startup
-
-# Uygulama başlangıcında yapılandırmayı doğrula (sadece uyarı, exception fırlatmaz)
-# Zorunlu anahtarlar için REQUIRE_* env var'larını kullanın
-_ = validate_config_on_startup(raise_on_missing=False)
+try:
+    from src.config_validator import validate_config_on_startup
+    
+    # Uygulama başlangıcında yapılandırmayı doğrula (sadece uyarı, exception fırlatmaz)
+    # Zorunlu anahtarlar için REQUIRE_* env var'larını kullanın
+    _, _ = validate_config_on_startup(raise_on_missing=False)
+except ImportError:
+    # Config validator yoksa sessizce devam et
+    pass
+except Exception as e:
+    # Hata durumunda sessizce devam et (Streamlit Cloud uyumluluğu için)
+    logger.warning(f"Yapılandırma doğrulama hatası: {e}")
 
 
 def analyze_company(

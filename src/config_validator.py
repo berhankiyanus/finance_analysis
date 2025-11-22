@@ -6,7 +6,7 @@ Streamlit ve CLI'da aynı davranışı sağlar.
 """
 
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from dotenv import load_dotenv
 from src.logger_config import setup_logger, mask_api_key
@@ -207,7 +207,7 @@ class ConfigValidator:
         return os.getenv('GEMINI_API_KEY') is not None
 
 
-def validate_config_on_startup(raise_on_missing: bool = False) -> bool:
+def validate_config_on_startup(raise_on_missing: bool = False) -> Tuple[bool, Dict]:
     """
     Uygulama başlangıcında yapılandırmayı doğrular.
     
@@ -218,8 +218,8 @@ def validate_config_on_startup(raise_on_missing: bool = False) -> bool:
     
     Döndürür:
     --------
-    bool
-        Yapılandırma geçerliyse True
+    Tuple[bool, Dict]
+        (Yapılandırma geçerli mi?, Detaylı sonuçlar)
     """
     logger.info("Yapılandırma doğrulanıyor...")
     is_valid, results = ConfigValidator.validate_config(raise_on_missing=raise_on_missing)
@@ -230,7 +230,7 @@ def validate_config_on_startup(raise_on_missing: bool = False) -> bool:
         logger.warning("⚠️  Yapılandırma eksik veya geçersiz!")
         logger.info(ConfigValidator.get_config_summary())
     
-    return is_valid
+    return is_valid, results
 
 
 if __name__ == "__main__":

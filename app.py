@@ -64,13 +64,31 @@ if not GEMINI_API_KEY:
 try:
     from src.config_validator import ConfigValidator, validate_config_on_startup
     # Uygulama başlangıcında yapılandırmayı kontrol et
-    config_valid, config_results = validate_config_on_startup(raise_on_missing=False)
-    if not config_valid or config_results.get('missing_optional'):
-        # Sidebar'da yapılandırma durumunu göster
-        with st.sidebar.expander("⚙️ Yapılandırma Durumu", expanded=False):
-            st.markdown(ConfigValidator.get_config_summary())
+    try:
+        result = validate_config_on_startup(raise_on_missing=False)
+        # Güvenli unpacking (eski versiyon uyumluluğu için)
+        if isinstance(result, tuple) and len(result) == 2:
+            config_valid, config_results = result
+        else:
+            # Eski versiyon: sadece bool döndürüyor
+            config_valid = result if isinstance(result, bool) else True
+            config_results = {}
+        
+        if not config_valid or (config_results and config_results.get('missing_optional')):
+            # Sidebar'da yapılandırma durumunu göster
+            try:
+                with st.sidebar.expander("⚙️ Yapılandırma Durumu", expanded=False):
+                    st.markdown(ConfigValidator.get_config_summary())
+            except Exception:
+                pass  # Sidebar hatası sessizce atlanır
+    except Exception as config_error:
+        # Yapılandırma doğrulama hatası (sessizce devam et)
+        pass
 except ImportError:
     pass  # Config validator yoksa sessizce devam et
+except Exception as e:
+    # Genel hata (sessizce devam et)
+    pass
 
 # Ana modülleri import et (try-except ile güvenli import)
 try:
