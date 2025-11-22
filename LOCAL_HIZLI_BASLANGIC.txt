@@ -1,0 +1,65 @@
+═══════════════════════════════════════════════════════════════
+🚀 LOCAL ÇALIŞTIRMA - HIZLI BAŞLANGIÇ
+═══════════════════════════════════════════════════════════════
+
+Streamlit Cloud'da bellek limiti hatası alıyorsanız, local'de çalıştırın.
+
+───────────────────────────────────────────────────────────────
+📋 ADIM 1: FastAPI'yi Başlat (Terminal 1)
+───────────────────────────────────────────────────────────────
+
+cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate
+venv/bin/python3 -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+
+Veya script ile:
+bash BASLAT_DIRECT.sh
+
+✅ Başarılı olursa: "INFO: Uvicorn running on http://127.0.0.1:8000"
+
+───────────────────────────────────────────────────────────────
+📋 ADIM 2: Streamlit'i Başlat (Terminal 2 - YENİ PENCERE)
+───────────────────────────────────────────────────────────────
+
+cd /Users/berhankiyanus/Desktop/Finance
+. venv/bin/activate
+streamlit run app.py
+
+Veya script ile:
+bash BASLA_LOCAL.sh
+
+✅ Başarılı olursa: "Local URL: http://localhost:8501"
+
+───────────────────────────────────────────────────────────────
+🌐 KULLANIM
+───────────────────────────────────────────────────────────────
+
+1. FastAPI: http://127.0.0.1:8000/docs
+2. Streamlit: http://localhost:8501
+
+───────────────────────────────────────────────────────────────
+⚠️  SORUN GİDERME
+───────────────────────────────────────────────────────────────
+
+❌ "venv/bin/python bulunamadı"
+   → python3 -m venv venv
+   → . venv/bin/activate
+   → pip install -r requirements.txt
+
+❌ "streamlit bulunamadı"
+   → pip install streamlit plotly
+
+❌ "uvicorn bulunamadı"
+   → pip install fastapi "uvicorn[standard]"
+
+❌ "Operation not permitted"
+   → Script yerine doğrudan komutları kullanın (yukarıdaki gibi)
+
+───────────────────────────────────────────────────────────────
+🔄 DURDURMA
+───────────────────────────────────────────────────────────────
+
+Her iki terminal'de de: Ctrl+C
+
+═══════════════════════════════════════════════════════════════
+
