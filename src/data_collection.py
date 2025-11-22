@@ -7,13 +7,19 @@ Bu modül, şirketler hakkında haber ve finansal veri toplar.
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import requests
 import time
 import os
 import json
 from dotenv import load_dotenv
 from pathlib import Path
+
+# Logging ve HTTP client
+from src.logger_config import setup_logger, mask_api_key
+from src.http_client import SafeHTTPClient, retry_with_backoff, get_http_client
+
+logger = setup_logger(__name__)
 
 # Gemini API için
 try:
@@ -67,13 +73,13 @@ def get_company_name(ticker: str) -> str:
         
         # Türkçe karakterleri koru ama gereksiz kısaltmaları temizle
         if clean_name:
-            print(f"✅ Şirket adı bulundu: {ticker} -> {clean_name}")
+            logger.info(f"Şirket adı bulundu: {ticker} -> {clean_name}")
             return clean_name
         
         return ticker.replace(".IS", "").replace(".", "")
         
     except Exception as e:
-        print(f"⚠️  Şirket ismi alınamadı ({ticker}): {e}")
+        logger.warning(f"Şirket ismi alınamadı ({ticker}): {e}")
         # Hata durumunda ticker'ın temizlenmiş halini döndür
         return ticker.replace(".IS", "").replace(".", "")
 
@@ -101,34 +107,28 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     
     # Eğer ticker verilmişse ve company_name eksik/generikse, yfinance'den şirket adını çek
     if ticker and (not company_name or company_name == ticker or len(company_name) <= 5):
-        print(f"🔍 Şirket adı eksik/generik, yfinance'den çekiliyor: {ticker}")
+        logger.debug(f"Şirket adı eksik/generik, yfinance'den çekiliyor: {ticker}")
         fetched_name = get_company_name(ticker)
         if fetched_name and fetched_name != ticker.replace(".IS", "").replace(".", ""):
             company_name = fetched_name
-            print(f"✅ Şirket adı güncellendi: {company_name}")
+            logger.info(f"Şirket adı güncellendi: {company_name}")
     
     # API key'i al
     if api_key is None:
         api_key = os.getenv('NEWS_API_KEY')
     
-    # Debug: API key kontrolü
+    # API key kontrolü (güvenlik: key'i loglama)
     if api_key:
-        print(f"✅ NEWS_API_KEY bulundu: {api_key[:10]}...")
+        logger.info(f"NEWS_API_KEY bulundu: {mask_api_key(api_key)}")
     else:
-        print("⚠️  NEWS_API_KEY bulunamadı!")
-        print(f"   .env dosyası yolu: {env_path}")
-        print(f"   .env dosyası var mı: {env_path.exists()}")
-        if env_path.exists():
-            print(f"   .env içeriği (ilk 50 karakter): {env_path.read_text()[:50]}")
+        logger.warning("NEWS_API_KEY bulunamadı")
+        logger.debug(f".env dosyası yolu: {env_path}, var mı: {env_path.exists()}")
     
     # Eğer API key yoksa, dummy veri döndür (test amaçlı)
+    # NOT: Üretimde bu yerine Exception fırlatılmalı, şimdilik backward compatibility için dummy data
     if api_key is None:
-        print("⚠️  NEWS_API_KEY bulunamadı. Dummy (test) veri kullanılıyor.")
-        print("   📝 Gerçek haberler için:")
-        print("   1. https://newsapi.org/ adresinden ücretsiz API key alın")
-        print("   2. Proje kök dizininde .env dosyası oluşturun")
-        print("   3. .env dosyasına şunu ekleyin: NEWS_API_KEY=your_api_key_here")
-        print("   4. Uygulamayı yeniden başlatın")
+        logger.warning("NEWS_API_KEY bulunamadı. Dummy (test) veri kullanılıyor.")
+        logger.info("Gerçek haberler için: https://newsapi.org/ adresinden ücretsiz API key alın")
         return _get_dummy_news(company_name, days_back)
     
     # NewsAPI'den haber çek
@@ -232,7 +232,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         # Son duplicate temizliği
         search_terms = list(dict.fromkeys(search_terms))
         
-        print(f"🔍 Toplam {len(search_terms)} arama terimi hazırlandı: {search_terms[:15]}...")  # İlk 15'ini göster
+        logger.debug(f"Toplam {len(search_terms)} arama terimi hazırlandı: {search_terms[:15]}...")
         
         # Finansal etkisi olan haberler için arama terimleri ekle
         # Bu terimler şirket hakkında finansal haberleri bulmaya yardımcı olur
@@ -273,8 +273,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
         total_results = 0
         
         # Strateji 1: Dil parametresi olmadan geniş arama - TÜM terimleri dene
-        print(f"🔍 {len(search_terms)} arama terimi ile geniş arama yapılıyor...")
-        print(f"   📋 İlk 10 arama terimi: {search_terms[:10]}")
+        logger.info(f"{len(search_terms)} arama terimi ile geniş arama yapılıyor...")
+        logger.debug(f"İlk 10 arama terimi: {search_terms[:10]}")
         
         # Ticker varsa öncelikli olarak dene (daha spesifik)
         priority_terms = []
@@ -303,8 +303,9 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
             }
             
             try:
-                response = requests.get(url, params=params, timeout=10)
-                response.raise_for_status()
+                # Güvenli HTTP istemci kullan (timeout ve retry desteği ile)
+                http_client = get_http_client()
+                response = http_client.get(url, params=params)
                 data = response.json()
                 
                 # API yanıtını kontrol et
@@ -313,15 +314,15 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     error_msg = data.get('message', 'Bilinmeyen hata')
                     error_code = data.get('code', 'Bilinmiyor')
                     if error_code == 'apiKeyInvalid':
-                        print(f"❌ NewsAPI hatası: API key geçersiz!")
-                        print("   ⚠️  Lütfen Streamlit secrets'taki NEWS_API_KEY'i kontrol edin.")
+                        logger.error("NewsAPI hatası: API key geçersiz!")
+                        logger.warning("Lütfen Streamlit secrets'taki NEWS_API_KEY'i kontrol edin.")
                         return _get_dummy_news(company_name, days_back)
                     elif error_code == 'rateLimited':
-                        print(f"❌ NewsAPI hatası: API limiti aşıldı!")
-                        print("   ⚠️  Ücretsiz plan günde 100 istek sınırına sahip.")
+                        logger.error("NewsAPI hatası: API limiti aşıldı!")
+                        logger.warning("Ücretsiz plan günde 100 istek sınırına sahip.")
                         return _get_dummy_news(company_name, days_back)
                     else:
-                        print(f"⚠️  NewsAPI hatası: {error_msg} (Kod: {error_code})")
+                        logger.warning(f"NewsAPI hatası: {error_msg} (Kod: {error_code})")
                         continue  # Bir sonraki arama terimini dene
                 
                 # Sonuçları topla (duplicate kontrolü ile)
@@ -339,17 +340,17 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                     
                     articles.extend(new_articles)
                     total_results = max(total_results, found_total)
-                    print(f"✅ '{search_term}' için {len(new_articles)} yeni haber bulundu (toplam: {len(articles)})")
+                    logger.info(f"'{search_term}' için {len(new_articles)} yeni haber bulundu (toplam: {len(articles)})")
                 else:
-                    print(f"⚠️  '{search_term}' için 0 haber bulundu")
+                    logger.debug(f"'{search_term}' için 0 haber bulundu")
                     
             except requests.exceptions.RequestException as e:
-                print(f"⚠️  '{search_term}' araması sırasında hata: {e}")
+                logger.warning(f"'{search_term}' araması sırasında hata: {e}")
                 continue  # Bir sonraki arama terimini dene
         
         # Strateji 2: Eğer hala yeterli haber yoksa, language parametresi ile dene
         if len(articles) < 20:  # Eğer 20'den az haber varsa, İngilizce arama da yap
-            print(f"🔄 İngilizce haberler için ek arama yapılıyor...")
+            logger.info("İngilizce haberler için ek arama yapılıyor...")
             for search_term in search_terms[:5]:  # İlk 5 terim için
                 params = {
                     'q': search_term,
@@ -362,8 +363,8 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 }
                 
                 try:
-                    response = requests.get(url, params=params, timeout=10)
-                    response.raise_for_status()
+                    http_client = get_http_client()
+                    response = http_client.get(url, params=params)
                     data = response.json()
                     
                     if data.get('status') == 'ok':
@@ -379,20 +380,21 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             
                             articles.extend(new_articles)
                             total_results = max(total_results, data.get('totalResults', 0))
-                            print(f"✅ '{search_term}' için {len(new_articles)} yeni İngilizce haber bulundu (toplam: {len(articles)})")
-                except:
+                            logger.info(f"'{search_term}' için {len(new_articles)} yeni İngilizce haber bulundu (toplam: {len(articles)})")
+                except Exception as e:
+                    logger.debug(f"İngilizce arama hatası: {e}")
                     continue
         
-        print(f"📊 NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} benzersiz haber toplandı")
-        print(f"   📅 Tarih aralığı: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}")
-        print(f"   🔍 Arama terimleri: {len(search_terms)} farklı terim kullanıldı")
-        print(f"   🤖 Gemini API ile alakalı haberler filtreleniyor...")
+        logger.info(f"NewsAPI yanıtı: {total_results} toplam haber bulundu, {len(articles)} benzersiz haber toplandı")
+        logger.debug(f"Tarih aralığı: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}")
+        logger.debug(f"Arama terimleri: {len(search_terms)} farklı terim kullanıldı")
+        logger.info("Gemini API ile alakalı haberler filtreleniyor...")
         
         if not articles:
             if total_results == 0:
-                print(f"⚠️  NewsAPI'de '{company_name}' için son {days_back} günde haber bulunamadı.")
-                print(f"   💡 İpucu: Şirket adını İngilizce veya ticker sembolü ile deneyin (örn: 'AAPL' yerine 'Apple Inc.')")
-                print(f"   ℹ️  API key çalışıyor, ancak bu şirket için haber bulunamadı.")
+                logger.warning(f"NewsAPI'de '{company_name}' için son {days_back} günde haber bulunamadı.")
+                logger.info("İpucu: Şirket adını İngilizce veya ticker sembolü ile deneyin (örn: 'AAPL' yerine 'Apple Inc.')")
+                logger.info("API key çalışıyor, ancak bu şirket için haber bulunamadı.")
                 
                 # NewsAPI başarısız - KAP raporlarını dene (Türk şirketleri için)
                 # Türk hisseleri: .IS uzantılı veya 5 karakterli (KCHOL, THYAO, vb.)
@@ -404,7 +406,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                 )
                 
                 if is_turkish_stock:
-                    print(f"   🔄 NewsAPI'de haber yok, KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_check})...")
+                    logger.info(f"NewsAPI'de haber yok, KAP raporları deneniyor (Türk hissesi: {ticker_clean_for_check})...")
                     try:
                         from .kap_scraper import get_kap_financial_reports
                     except ImportError:
@@ -420,7 +422,7 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             kap_reports = get_kap_financial_reports(ticker_clean, limit=20)
                             
                             if kap_reports and len(kap_reports) > 0:
-                                print(f"   ✅ {len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
+                                logger.info(f"{len(kap_reports)} KAP raporu bulundu, haber formatına çevriliyor...")
                                 # KAP raporlarını haber formatına çevir
                                 news_list = []
                                 for report in kap_reports:
@@ -436,18 +438,18 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                                 
                                 if news_list:
                                     news_df = pd.DataFrame(news_list)
-                                    print(f"   ✅ {len(news_df)} haber KAP'tan alındı!")
+                                    logger.info(f"{len(news_df)} haber KAP'tan alındı!")
                                     return news_df
                         except Exception as kap_error:
-                            print(f"   ⚠️  KAP raporları alınamadı: {kap_error}")
+                            logger.warning(f"KAP raporları alınamadı: {kap_error}")
                 
                 # KAP da yoksa Google News RSS'i dene
-                print(f"   🔄 KAP'tan veri yok, Google News RSS deneniyor...")
+                logger.info("KAP'tan veri yok, Google News RSS deneniyor...")
                 try:
                     from src.google_search import get_google_news_rss
                     rss_news = get_google_news_rss(f"{company_name} hisse", num_results=10)
                     if rss_news and len(rss_news) > 0:
-                        print(f"   ✅ Google News RSS'ten {len(rss_news)} haber bulundu!")
+                        logger.info(f"Google News RSS'ten {len(rss_news)} haber bulundu!")
                         news_list = []
                         for news_item in rss_news:
                             news_list.append({
@@ -463,13 +465,14 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             news_df = pd.DataFrame(news_list)
                             return news_df
                 except Exception as rss_error:
-                    print(f"   ⚠️  Google News RSS hatası: {rss_error}")
+                    logger.warning(f"Google News RSS hatası: {rss_error}")
                 
                 # Hiçbir kaynak yoksa boş DataFrame döndür (dummy veri değil)
+                logger.warning("Hiçbir haber kaynağından veri bulunamadı. Boş DataFrame döndürülüyor.")
                 return pd.DataFrame(columns=['title', 'summary', 'content', 'published_at', 'source', 'url', 'relevance_score'])
             else:
-                print(f"⚠️  NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")
-                print("⚠️  Dummy veri kullanılıyor.")
+                logger.warning(f"NewsAPI'de {total_results} haber bulundu ama döndürülemedi (sayfalama sorunu olabilir).")
+                logger.warning("Dummy veri kullanılıyor.")
                 return _get_dummy_news(company_name, days_back)
         
         news_list = []
@@ -493,20 +496,20 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
                             test_response = gemini_model.generate_content("Test: Sayı 1")
                             if test_response and test_response.text:
                                 gemini_working = True
-                                print(f"✅ Gemini API çalışıyor: {model_name} (relevance kontrolü için).")
+                                logger.info(f"Gemini API çalışıyor: {model_name} (relevance kontrolü için).")
                                 break
                         except Exception as model_error:
-                            print(f"⚠️  {model_name} modeli çalışmadı: {model_error}")
+                            logger.debug(f"{model_name} modeli çalışmadı: {model_error}")
                             continue
                     
                     if gemini_model is None:
-                        print("⚠️  Hiçbir Gemini modeli çalışmadı. Relevance kontrolü Gemini olmadan yapılacak.")
+                        logger.warning("Hiçbir Gemini modeli çalışmadı. Relevance kontrolü Gemini olmadan yapılacak.")
                 except Exception as e:
-                    print(f"⚠️  Gemini API yapılandırılamadı: {e}")
+                    logger.warning(f"Gemini API yapılandırılamadı: {e}")
             else:
-                print("ℹ️  GEMINI_API_KEY bulunamadı. Relevance kontrolü basit yöntemle yapılacak.")
+                logger.info("GEMINI_API_KEY bulunamadı. Relevance kontrolü basit yöntemle yapılacak.")
         else:
-            print("ℹ️  Gemini API yüklü değil. Relevance kontrolü basit yöntemle yapılacak.")
+            logger.info("Gemini API yüklü değil. Relevance kontrolü basit yöntemle yapılacak.")
         
         # Her bir article'ı güvenli şekilde işle
         for article in articles:
@@ -619,7 +622,7 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                         
                         # Finansal etkisi olmayan haberleri filtrele
                         if not has_financial_impact and financial_impact_score < 0.3:
-                            print(f"🤖 Gemini: '{title[:50]}...' -> Finansal etkisi yok, filtreleniyor (impact: {financial_impact_score:.2f})")
+                            logger.debug(f"Gemini: '{title[:50]}...' -> Finansal etkisi yok, filtreleniyor (impact: {financial_impact_score:.2f})")
                             continue  # Finansal etkisi olmayan haberi atla
                         
                         # Hem relevance hem finansal etkiyi dikkate al
@@ -627,15 +630,15 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                             # Kombine score: relevance (40%) + financial_impact (60%)
                             combined_score = (gemini_relevance_score * 0.4) + (financial_impact_score * 0.6)
                             relevance_score = max(relevance_score, combined_score)
-                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı ve finansal etkisi var (relevance: {gemini_relevance_score:.2f}, impact: {financial_impact_score:.2f}, combined: {combined_score:.2f})")
+                            logger.debug(f"Gemini: '{title[:50]}...' -> Alakalı ve finansal etkisi var (relevance: {gemini_relevance_score:.2f}, impact: {financial_impact_score:.2f}, combined: {combined_score:.2f})")
                         elif is_relevant:
                             # Alakalı ama finansal etkisi düşük - relevance score'u kullan
                             relevance_score = max(relevance_score, gemini_relevance_score * 0.7)  # Düşük ağırlık
-                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakalı ama finansal etkisi düşük (relevance: {gemini_relevance_score:.2f})")
+                            logger.debug(f"Gemini: '{title[:50]}...' -> Alakalı ama finansal etkisi düşük (relevance: {gemini_relevance_score:.2f})")
                         else:
                             # Alakasız - relevance score'u düşür
                             relevance_score = min(relevance_score, gemini_relevance_score)
-                            print(f"🤖 Gemini: '{title[:50]}...' -> Alakasız (score: {gemini_relevance_score:.2f})")
+                            logger.debug(f"Gemini: '{title[:50]}...' -> Alakasız (score: {gemini_relevance_score:.2f})")
                             
                     except Exception as e:
                         # Gemini hatası - normal relevance score'u kullan
@@ -1088,19 +1091,30 @@ def get_price_data(ticker: str, period: str = "1y") -> pd.DataFrame:
         if hist.empty and not is_turkish_stock and not ('.IS' in original_ticker or original_ticker.endswith('.IS')):
             # Türk hissesi olabilir - .IS ekleyip tekrar dene
             ticker_with_is = original_ticker + '.IS'
-            print(f"🔄 {original_ticker} için veri bulunamadı, {ticker_with_is} ile tekrar deneniyor...")
-            stock = yf.Ticker(ticker_with_is)
-            hist = stock.history(period=period)
+            logger.info(f"{original_ticker} için veri bulunamadı, {ticker_with_is} ile tekrar deneniyor...")
+            
+            signal.alarm(30)  # Timeout ayarla
+            try:
+                stock = yf.Ticker(ticker_with_is)
+                hist = stock.history(period=period)
+            finally:
+                signal.alarm(0)
             
             if not hist.empty:
                 ticker_formatted = ticker_with_is
-                print(f"✅ {ticker_with_is} ile veri bulundu!")
+                logger.info(f"{ticker_with_is} ile veri bulundu!")
             else:
-                print(f"⚠️  {original_ticker} ve {ticker_with_is} için veri bulunamadı. Dummy veri kullanılıyor.")
-                return _get_dummy_price_data(original_ticker)
+                logger.warning(f"{original_ticker} ve {ticker_with_is} için veri bulunamadı.")
+                if use_dummy_on_failure:
+                    return _get_dummy_price_data(original_ticker), False
+                else:
+                    raise ValueError(f"Fiyat verisi bulunamadı: {original_ticker}")
         elif hist.empty:
-            print(f"⚠️  {ticker_formatted} için veri bulunamadı. Dummy veri kullanılıyor.")
-            return _get_dummy_price_data(original_ticker)
+            logger.warning(f"{ticker_formatted} için veri bulunamadı.")
+            if use_dummy_on_failure:
+                return _get_dummy_price_data(original_ticker), False
+            else:
+                raise ValueError(f"Fiyat verisi bulunamadı: {ticker_formatted}")
         
         # Kolon isimlerini standartlaştır
         hist.reset_index(inplace=True)
