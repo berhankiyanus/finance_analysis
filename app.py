@@ -710,8 +710,22 @@ elif page == "🏠 Ana Sayfa - Analiz":
                 st.error("❌ Lütfen şirket adı ve borsa kodunu girin!")
             else:
                 with st.spinner("🔄 Analiz yapılıyor... Bu birkaç dakika sürebilir."):
+                    results = None
+                    error_occurred = False
+                    error_message = ""
+                    
+                    # Logger import et (eğer yoksa)
+                    try:
+                        import logging
+                        _logger = logging.getLogger(__name__)
+                    except:
+                        _logger = None
+                    
                     try:
                         # Analiz yap (cache'lenmiş versiyon)
+                        if _logger:
+                            _logger.info(f"Analiz başlatılıyor: {company_name} ({ticker})")
+                        
                         results = cached_analyze_company(
                             company_name=company_name,
                             ticker=ticker,
@@ -720,23 +734,73 @@ elif page == "🏠 Ana Sayfa - Analiz":
                             financial_weight=financial_weight
                         )
                         
-                        # Sonuçları göster
-                        st.success("✅ Analiz tamamlandı!")
+                        if _logger:
+                            _logger.info(f"Analiz tamamlandı: {type(results)}")
+                        
+                        # Sonuçları kontrol et
+                        if results is None:
+                            error_message = "Analiz sonuç döndürmedi. Lütfen tekrar deneyin."
+                            if _logger:
+                                _logger.error(error_message)
+                            st.error(f"❌ {error_message}")
+                            error_occurred = True
+                        elif not isinstance(results, dict):
+                            error_message = f"Analiz beklenmeyen bir format döndürdü: {type(results)}"
+                            if _logger:
+                                _logger.error(error_message)
+                            st.error(f"❌ {error_message}")
+                            error_occurred = True
+                        else:
+                            # Sonuçları göster
+                            if _logger:
+                                _logger.info(f"Analiz başarılı: {len(results)} anahtar var")
+                            st.success("✅ Analiz tamamlandı!")
+                            
                     except requests.exceptions.RequestException as e:
-                        st.error(f"❌ Veri alınamadı: API bağlantı hatası")
+                        error_message = f"Veri alınamadı: API bağlantı hatası - {str(e)}"
+                        if _logger:
+                            _logger.error(error_message)
+                            _logger.exception(e)
+                        st.error(f"❌ {error_message}")
                         st.info("💡 Lütfen internet bağlantınızı kontrol edin ve birkaç dakika sonra tekrar deneyin.")
-                        st.exception(e)
+                        import traceback
+                        with st.expander("🔍 Hata Detayları"):
+                            st.code(traceback.format_exc(), language="python")
+                        error_occurred = True
                         results = None
                     except Exception as e:
-                        st.error(f"❌ Analiz sırasında hata oluştu")
+                        error_message = f"Analiz sırasında hata oluştu: {str(e)}"
+                        if _logger:
+                            _logger.error(error_message)
+                            _logger.exception(e)
+                        st.error(f"❌ {error_message}")
                         st.info("💡 Lütfen tekrar deneyin. Sorun devam ederse, hata detaylarını kontrol edin.")
                         import traceback
                         with st.expander("🔍 Hata Detayları"):
                             st.code(traceback.format_exc(), language="python")
+                        error_occurred = True
                         results = None
                     
-                    if results is None:
+                    # Hata durumunda veya sonuç yoksa durdur
+                    if error_occurred or results is None:
+                        st.warning("⚠️ Analiz tamamlanamadı. Lütfen parametreleri kontrol edip tekrar deneyin.")
+                        st.info("💡 **Olası nedenler:**\n"
+                               "- API bağlantı hatası\n"
+                               "- Veri bulunamadı\n"
+                               "- İnternet bağlantısı sorunu\n"
+                               "- API key eksik veya geçersiz\n"
+                               f"- Hata: {error_message}")
                         st.stop()  # Hata durumunda devam etme
+                    
+                    # Sonuçları doğrula
+                    if not isinstance(results, dict):
+                        st.error(f"❌ Analiz beklenmeyen bir format döndürdü: {type(results)}")
+                        st.stop()
+                    
+                    # Sonuçların içeriğini kontrol et
+                    if not results:
+                        st.warning("⚠️ Analiz sonuçları boş. Lütfen tekrar deneyin.")
+                        st.stop()
                     
                     # Tabs yapısı - v4 yol haritası gereksinimi
                     try:
