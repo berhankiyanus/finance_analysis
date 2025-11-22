@@ -12,12 +12,21 @@ import requests
 import time
 import os
 import json
+import signal
 from dotenv import load_dotenv
 from pathlib import Path
 
 # Logging ve HTTP client
 from src.logger_config import setup_logger, mask_api_key
 from src.http_client import SafeHTTPClient, retry_with_backoff, get_http_client
+
+# Stale Data Manager
+try:
+    from src.stale_data_manager import get_stale_data_manager
+    STALE_DATA_AVAILABLE = True
+except ImportError:
+    STALE_DATA_AVAILABLE = False
+    logger.warning("⚠️  Stale Data Manager bulunamadı. Dummy data kullanılacak.")
 
 logger = setup_logger(__name__)
 
@@ -1083,6 +1092,8 @@ def get_price_data(ticker: str, period: str = "1y", use_dummy_on_failure: bool =
     Türk hisseleri için otomatik .IS ekleme: Eğer veri bulunamazsa ve ticker'da .IS yoksa,
     otomatik olarak .IS ekleyip tekrar dener.
     
+    Stale Data Manager entegrasyonu: API hatası durumunda en son kaydedilmiş veriyi gösterir.
+    
     Parametreler:
     ------------
     ticker : str
@@ -1090,13 +1101,54 @@ def get_price_data(ticker: str, period: str = "1y", use_dummy_on_failure: bool =
     period : str
         Veri periyodu (örn: "1mo", "3mo", "6mo", "1y", "2y", "5y")
     use_dummy_on_failure : bool
-        True ise hata durumlarında dummy fiyat verisi döndürülür; False ise istisna fırlatılır.
+        True ise hata durumlarında stale data (veya dummy) döndürülür; False ise istisna fırlatılır.
         Varsayılan: True (backward compatibility için)
     
     Döndürür:
     --------
     pd.DataFrame
         Kolonlar: 'date', 'open', 'high', 'low', 'close', 'volume', 'adjusted_close'
+        DataFrame.attrs içinde 'is_stale', 'age_hours', 'warning' bilgileri olabilir
+    """
+    
+    original_ticker = ticker
+    
+    # Stale Data Manager'ı kullan (eğer mevcutsa)
+    if STALE_DATA_AVAILABLE:
+        try:
+            manager = get_stale_data_manager()
+            
+            def _fetch_price_data():
+                """İç fonksiyon: Gerçek API çağrısı"""
+                return _get_price_data_internal(ticker, period)
+            
+            # Stale data fallback ile veri çek
+            price_df, metadata = manager.get_data_with_fallback(
+                data_type="price_data",
+                identifier=f"{ticker}_{period}",
+                fetch_func=_fetch_price_data
+            )
+            
+            # Metadata'yı DataFrame'e ekle
+            if isinstance(price_df, pd.DataFrame):
+                price_df.attrs.update(metadata)
+                if metadata.get('is_stale'):
+                    logger.warning(f"⚠️ Stale data kullanılıyor: {metadata.get('warning', '')}")
+            
+            return price_df
+            
+        except Exception as stale_error:
+            logger.warning(f"Stale data manager hatası: {stale_error}, normal akışa geçiliyor...")
+            # Normal akışa devam et
+    
+    # Normal akış (stale data manager yoksa veya hata verirse)
+    return _get_price_data_internal(ticker, period, use_dummy_on_failure)
+
+
+def _get_price_data_internal(ticker: str, period: str = "1y", use_dummy_on_failure: bool = True) -> pd.DataFrame:
+    """
+    İç fonksiyon: Gerçek fiyat verisi çekme mantığı.
+    Stale data manager tarafından çağrılır veya doğrudan kullanılabilir.
     """
     
     original_ticker = ticker

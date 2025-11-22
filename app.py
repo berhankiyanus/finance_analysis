@@ -740,12 +740,15 @@ elif page == "🏠 Ana Sayfa - Analiz":
                     
                     # Tabs yapısı - v4 yol haritası gereksinimi
                     try:
-                        tab_overview, tab_detailed, tab_news_report, tab_faaliyet_raporu, tab_scenario, tab_portfolio, tab_time_travel, tab_pdf_chat = st.tabs([
+                        tab_overview, tab_detailed, tab_news_report, tab_faaliyet_raporu, tab_scenario, tab_competitor, tab_kap_detective, tab_insider, tab_portfolio, tab_time_travel, tab_pdf_chat = st.tabs([
                             "📊 Genel Bakış",
                             "📈 Detaylı Analiz",
                             "📰 Haberler & Rapor",
                             "📄 Faaliyet Raporu",
                             "🎛️ Senaryo Analizi",
+                            "⚔️ Rakip Analizi",
+                            "🔍 KAP Dedektifi",
+                            "👔 Insider Trading",
                             "💼 Portföy",
                             "🕐 Time Travel",
                             "💬 PDF Chat"
@@ -902,9 +905,63 @@ elif page == "🏠 Ana Sayfa - Analiz":
                             direction_emoji = {"up": "📈", "down": "📉", "neutral": "➡️"}
                             direction_tr = {"up": "YÜKSELİŞ", "down": "DÜŞÜŞ", "neutral": "NÖTR"}
                             
-                            st.write(f"**Yön Tahmini:** {direction_emoji.get(pred.get('direction', 'neutral'), '❓')} "
-                                       f"{direction_tr.get(pred.get('direction', 'neutral'), 'NÖTR')} "
-                                   f"({pred.get('confidence', 0):.1%} güven)")
+                            direction = pred.get('direction', 'neutral')
+                            
+                            col_dir1, col_dir2 = st.columns([3, 1])
+                            with col_dir1:
+                                st.write(f"**Yön Tahmini:** {direction_emoji.get(direction, '❓')} "
+                                           f"{direction_tr.get(direction, 'NÖTR')} "
+                                       f"({pred.get('confidence', 0):.1%} güven)")
+                            
+                            # Şeytanın Avukatı butonu (AL sinyali verildiğinde)
+                            if direction in ['up', 'positive'] and pred.get('confidence', 0) > 0.6:
+                                with col_dir2:
+                                    if st.button("😈 Neden Almamalıyım?", key="devils_advocate_btn", help="AL sinyali verildiğinde riskleri göster"):
+                                        st.session_state['show_devils_advocate'] = True
+                            
+                            # Şeytanın Avukatı analizi göster
+                            if st.session_state.get('show_devils_advocate', False):
+                                try:
+                                    from src.devils_advocate import analyze_why_not_to_buy
+                                    import google.generativeai as genai
+                                    
+                                    if GEMINI_API_KEY:
+                                        genai.configure(api_key=GEMINI_API_KEY)
+                                        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                                    else:
+                                        gemini_model = None
+                                    
+                                    with st.spinner("😈 Şeytanın Avukatı analizi yapılıyor..."):
+                                        devils_analysis = analyze_why_not_to_buy(
+                                            ticker=ticker,
+                                            company_name=company_name,
+                                            analysis_results=results,
+                                            gemini_model=gemini_model
+                                        )
+                                    
+                                    if devils_analysis.get('success'):
+                                        st.warning(f"**⚠️ {devils_analysis.get('recommendation', 'BEKLE')}**")
+                                        st.write(devils_analysis.get('summary', ''))
+                                        
+                                        st.subheader("🚨 Tespit Edilen Riskler")
+                                        for i, risk in enumerate(devils_analysis.get('risks', []), 1):
+                                            severity_color = {
+                                                'high': '🔴',
+                                                'medium': '🟡',
+                                                'low': '🟢'
+                                            }
+                                            st.write(f"{i}. {severity_color.get(risk.get('severity', 'medium'), '⚪')} **{risk.get('title', 'Risk')}**")
+                                            st.caption(risk.get('description', ''))
+                                            if risk.get('evidence'):
+                                                st.caption(f"Kanıt: {risk.get('evidence')}")
+                                        
+                                        if st.button("❌ Kapat", key="close_devils_advocate"):
+                                            st.session_state['show_devils_advocate'] = False
+                                            st.rerun()
+                                except Exception as e:
+                                    st.error(f"Şeytanın Avukatı analizi hatası: {e}")
+                                    import traceback
+                                    st.code(traceback.format_exc())
                         
                             # Hızlı fiyat grafiği (AL/SAT sinyalleri ile)
                             if not results['price_df'].empty:
@@ -1677,7 +1734,169 @@ elif page == "🏠 Ana Sayfa - Analiz":
                                 else:
                                     st.warning("⚠️ Fiyat verisi bulunamadı. Senaryo analizi yapılamıyor.")
                         
-                        # TAB 5: Portföy
+                        # TAB 6: Rakip Analizi
+                        with tab_competitor:
+                            st.subheader("⚔️ Rakip Analizi")
+                            st.info("💡 Seçilen hissenin en büyük rakibiyle head-to-head karşılaştırma.")
+                            
+                            try:
+                                from src.competitor_analysis import find_competitor, compare_companies
+                                
+                                competitor_ticker = find_competitor(ticker)
+                                
+                                if competitor_ticker:
+                                    st.success(f"✅ Rakip bulundu: **{competitor_ticker}**")
+                                    
+                                    if st.button("🔄 Rakip Analizini Çalıştır", key="run_competitor_analysis"):
+                                        with st.spinner("Rakip analizi yapılıyor..."):
+                                            try:
+                                                competitor_name = competitor_ticker
+                                                
+                                                comparison = compare_companies(
+                                                    ticker1=ticker,
+                                                    ticker2=competitor_ticker,
+                                                    company_name1=company_name,
+                                                    company_name2=competitor_name,
+                                                    analysis_results1=results,
+                                                    analysis_results2=None
+                                                )
+                                                
+                                                if comparison.get('success'):
+                                                    col1, col2 = st.columns(2)
+                                                    
+                                                    with col1:
+                                                        st.subheader(f"🏢 {company_name} ({ticker})")
+                                                        st.metric("Genel Skor", f"{comparison['company1']['overall_score']:.1f}/100")
+                                                        st.metric("Sentiment", f"{comparison['company1']['sentiment_score']:.1f}/100")
+                                                        st.metric("Finansal", f"{comparison['company1']['financial_score']:.1f}/100")
+                                                        st.write(f"**Yön:** {comparison['company1']['direction']} ({comparison['company1']['confidence']:.1%})")
+                                                        if 'current_price' in comparison['company1']:
+                                                            st.metric("Fiyat", f"₺{comparison['company1']['current_price']:.2f}", 
+                                                                     delta=f"{comparison['company1'].get('price_change_1mo', 0):+.2f}%")
+                                                    
+                                                    with col2:
+                                                        st.subheader(f"🏢 {competitor_name} ({competitor_ticker})")
+                                                        st.metric("Genel Skor", f"{comparison['company2']['overall_score']:.1f}/100")
+                                                        st.metric("Sentiment", f"{comparison['company2']['sentiment_score']:.1f}/100")
+                                                        st.metric("Finansal", f"{comparison['company2']['financial_score']:.1f}/100")
+                                                        st.write(f"**Yön:** {comparison['company2']['direction']} ({comparison['company2']['confidence']:.1%})")
+                                                        if 'current_price' in comparison['company2']:
+                                                            st.metric("Fiyat", f"₺{comparison['company2']['current_price']:.2f}", 
+                                                                     delta=f"{comparison['company2'].get('price_change_1mo', 0):+.2f}%")
+                                                    
+                                                    st.divider()
+                                                    
+                                                    if comparison['winner'] == ticker:
+                                                        st.success(f"🏆 **Kazanan:** {company_name} ({ticker})")
+                                                    elif comparison['winner'] == competitor_ticker:
+                                                        st.warning(f"🏆 **Kazanan:** {competitor_name} ({competitor_ticker})")
+                                                    else:
+                                                        st.info("🤝 **Berabere:** İki şirket de benzer skorlara sahip")
+                                                    
+                                                    st.write(comparison.get('comparison_summary', ''))
+                                                else:
+                                                    st.error(f"❌ Rakip analizi başarısız: {comparison.get('error', 'Bilinmeyen hata')}")
+                                            except Exception as e:
+                                                st.error(f"❌ Rakip analizi hatası: {e}")
+                                                import traceback
+                                                st.code(traceback.format_exc())
+                                else:
+                                    st.warning("⚠️ Bu hisse için rakip bulunamadı.")
+                            except ImportError:
+                                st.warning("⚠️ Rakip analizi modülü bulunamadı.")
+                            except Exception as e:
+                                st.error(f"❌ Rakip analizi hatası: {e}")
+                        
+                        # TAB 7: KAP Dedektifi
+                        with tab_kap_detective:
+                            st.subheader("🔍 KAP Dedektifi")
+                            st.info("💡 Faaliyet raporlarındaki dil değişimini analiz eder.")
+                            
+                            try:
+                                from src.kap_detective import analyze_language_change, detect_red_flags
+                                from src.kap_scraper import get_kap_financial_reports
+                                import google.generativeai as genai
+                                
+                                if GEMINI_API_KEY:
+                                    genai.configure(api_key=GEMINI_API_KEY)
+                                    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                                else:
+                                    gemini_model = None
+                                    st.warning("⚠️ Gemini API key gerekli.")
+                                
+                                if gemini_model:
+                                    ticker_clean = ticker.replace('.IS', '')
+                                    kap_reports = get_kap_financial_reports(ticker_clean, limit=10)
+                                    
+                                    if kap_reports:
+                                        st.success(f"✅ {len(kap_reports)} KAP bildirimi bulundu.")
+                                        
+                                        if len(kap_reports) >= 2:
+                                            if st.button("🔍 Dil Değişimini Analiz Et", key="analyze_language_change"):
+                                                with st.spinner("Dil analizi yapılıyor..."):
+                                                    current_text = f"{kap_reports[0].get('title', '')} {kap_reports[0].get('type', '')}"
+                                                    previous_text = f"{kap_reports[1].get('title', '')} {kap_reports[1].get('type', '')}"
+                                                    
+                                                    analysis = analyze_language_change(
+                                                        current_report_text=current_text,
+                                                        previous_report_text=previous_text,
+                                                        gemini_model=gemini_model
+                                                    )
+                                                    
+                                                    if analysis.get('success'):
+                                                        result = analysis.get('analysis', {})
+                                                        tone_change = result.get('tone_change', 'similar')
+                                                        tone_emoji = {'more_concerned': '🔴', 'more_optimistic': '🟢', 'similar': '🟡'}
+                                                        st.write(f"{tone_emoji.get(tone_change, '⚪')} **Ton:** {tone_change}")
+                                                        if 'key_changes' in result:
+                                                            for change in result['key_changes']:
+                                                                st.write(f"- {change}")
+                                                        if 'red_flags' in result:
+                                                            for flag in result['red_flags']:
+                                                                st.warning(f"⚠️ {flag}")
+                                    else:
+                                        st.info("ℹ️ KAP bildirimi bulunamadı.")
+                            except Exception as e:
+                                st.error(f"❌ KAP Dedektifi hatası: {e}")
+                        
+                        # TAB 8: Insider Trading
+                        with tab_insider:
+                            st.subheader("👔 Insider Trading Takibi")
+                            st.info("💡 Şirket yöneticilerinin pay alım/satım işlemlerini takip eder.")
+                            
+                            try:
+                                from src.insider_trading import get_insider_trading_from_kap
+                                
+                                if st.button("🔍 Insider Trading Analizini Çalıştır", key="run_insider_analysis"):
+                                    with st.spinner("Insider trading analizi yapılıyor..."):
+                                        ticker_clean = ticker.replace('.IS', '')
+                                        insider_analysis = get_insider_trading_from_kap(ticker_clean, limit=20)
+                                        
+                                        if insider_analysis.get('success'):
+                                            insider_trades = insider_analysis.get('insider_trades', [])
+                                            sentiment = insider_analysis.get('sentiment', {})
+                                            
+                                            if insider_trades:
+                                                st.success(f"✅ {len(insider_trades)} insider trading işlemi tespit edildi.")
+                                                sentiment_score = sentiment.get('score', 0.0)
+                                                sentiment_type = sentiment.get('sentiment', 'neutral')
+                                                sentiment_emoji = {'very_positive': '🟢🟢', 'positive': '🟢', 'neutral': '🟡', 'negative': '🔴', 'very_negative': '🔴🔴'}
+                                                st.write(f"{sentiment_emoji.get(sentiment_type, '⚪')} **Sentiment:** {sentiment_type.upper()}")
+                                                st.metric("Sentiment Skoru", f"{sentiment_score:.2f}", 
+                                                        delta=f"{sentiment.get('buy_count', 0)} alım, {sentiment.get('sell_count', 0)} satım")
+                                                st.write(sentiment.get('message', ''))
+                                                
+                                                for trade in insider_trades:
+                                                    action_emoji = {'BUY': '🟢', 'SELL': '🔴', 'UNKNOWN': '⚪'}
+                                                    with st.expander(f"{action_emoji.get(trade.get('action', 'UNKNOWN'), '⚪')} {trade.get('title', 'Başlık yok')}", expanded=False):
+                                                        st.write(f"**Tarih:** {trade.get('date', 'Bilinmiyor')}")
+                                                        st.write(f"**İşlem:** {trade.get('action', 'UNKNOWN')}")
+                                                        if trade.get('position'):
+                                                            st.write(f"**Pozisyon:** {trade.get('position')}")
+                            except Exception as e:
+                                st.error(f"❌ Insider trading hatası: {e}")
+                        
+                        # TAB 9: Portföy
                         with tab_portfolio:
                             st.subheader("💼 Portföy Analizi")
                             st.info("💡 Bu hisseyi portföyünüze eklemek için 'Portföy Optimizasyonu' sayfasını kullanın.")
@@ -2366,7 +2585,7 @@ elif page == "📊 Sektörel Analiz":
             US_SECTORS
         )
         
-        tab1, tab2, tab3, tab4 = st.tabs(["🔗 İki Hisse Korelasyonu", "📈 Sektör Korelasyon Matrisi", "🔄 Sektör Rotasyonu", "💰 Arbitraj Fırsatları"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔗 İki Hisse Korelasyonu", "📈 Sektör Korelasyon Matrisi", "🔄 Sektör Rotasyonu (Sankey)", "💰 Arbitraj Fırsatları", "🏛️ Yatırım Kurulu"])
         
         with tab1:
             st.subheader("🔗 İki Hisse Arası Korelasyon")
@@ -2461,7 +2680,118 @@ elif page == "📊 Sektörel Analiz":
                         st.dataframe(corr_matrix, width='stretch')
         
         with tab3:
-            st.subheader("🔄 Sektör Rotasyonu")
+            st.subheader("🔄 Sektör Rotasyonu (Sankey Diagram)")
+            st.info("💡 Paranın hangi sektörden çıkıp hangisine girdiğini gösteren dinamik akış şeması.")
+            
+            try:
+                from src.sector_rotation import get_sector_rotation_analysis
+                
+                # Ticker listesi al (portföy sayfasından veya manuel)
+                sector_tickers_input = st.text_input(
+                    "Analiz Edilecek Hisseler (virgülle ayırın)",
+                    value="THYAO,PGSUS,GARAN,AKBNK,TUPRS,EREGL",
+                    key="sector_tickers_input"
+                )
+                
+                period_sector = st.selectbox(
+                    "Zaman Periyodu",
+                    ["1mo", "3mo", "6mo", "1y"],
+                    index=0,
+                    key="sector_period"
+                )
+                
+                if st.button("🔄 Sektör Rotasyonu Analizini Çalıştır", key="run_sector_rotation"):
+                    with st.spinner("Sektör rotasyonu analizi yapılıyor..."):
+                        tickers = [t.strip().upper() for t in sector_tickers_input.split(',') if t.strip()]
+                        
+                        if len(tickers) < 2:
+                            st.error("❌ En az 2 hisse gerekli!")
+                        else:
+                            analysis = get_sector_rotation_analysis(tickers, period=period_sector)
+                            
+                            if analysis.get('success'):
+                                st.markdown(analysis.get('summary', ''))
+                                
+                                # Sankey diagram göster
+                                if analysis.get('sankey_figure'):
+                                    st.plotly_chart(analysis['sankey_figure'], use_container_width=True)
+                                
+                                # Sektör performans tablosu
+                                if analysis.get('sector_performance'):
+                                    st.subheader("📊 Sektör Performansları")
+                                    perf_df = pd.DataFrame([
+                                        {
+                                            'Sektör': sector,
+                                            'Performans Skoru': perf.get('performance_score', 0),
+                                            'Ortalama Fiyat Değişimi': perf.get('avg_price_change', 0),
+                                            'Ortalama Hacim Değişimi': perf.get('avg_volume_change', 0),
+                                            'Hisse Sayısı': perf.get('ticker_count', 0)
+                                        }
+                                        for sector, perf in analysis['sector_performance'].items()
+                                    ]).sort_values('Performans Skoru', ascending=False)
+                                    
+                                    st.dataframe(perf_df, use_container_width=True)
+                            else:
+                                st.error(f"❌ Analiz başarısız: {analysis.get('error', 'Bilinmeyen hata')}")
+            except ImportError:
+                st.warning("⚠️ Sektör rotasyonu modülü bulunamadı.")
+            except Exception as e:
+                st.error(f"❌ Sektör rotasyonu hatası: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+        
+        with tab5:
+            st.subheader("🏛️ Yatırım Kurulu (Agentic AI)")
+            st.info("💡 3 yapay zeka ajanı (Boğa, Ayı, Hakem) tartışıyor ve nihai karar veriyor.")
+            
+            try:
+                from src.agents.investment_board import InvestmentBoard
+                import google.generativeai as genai
+                
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                else:
+                    gemini_model = None
+                    st.warning("⚠️ Gemini API key gerekli. Rule-based analiz kullanılacak.")
+                
+                # Analiz sonuçlarını al (eğer varsa)
+                if 'results' in locals() and results:
+                    if st.button("🏛️ Yatırım Kurulu Toplantısını Başlat", key="start_investment_board"):
+                        with st.spinner("Yatırım kurulu toplantısı yapılıyor..."):
+                            board = InvestmentBoard(gemini_model)
+                            meeting = board.conduct_meeting(results)
+                            
+                            if meeting.get('success'):
+                                st.markdown(meeting.get('meeting_summary', ''))
+                                
+                                # Detaylı görüşler
+                                with st.expander("🐂 Boğa (Bull) Detaylı Görüşü", expanded=False):
+                                    bull = meeting.get('bull_opinion', {})
+                                    st.write(f"**Öneri:** {bull.get('recommendation', 'AL')}")
+                                    st.write(f"**Güven:** {bull.get('confidence', 0.5):.1%}")
+                                    st.write(f"**Özet:** {bull.get('summary', '')}")
+                                
+                                with st.expander("🐻 Ayı (Bear) Detaylı Görüşü", expanded=False):
+                                    bear = meeting.get('bear_opinion', {})
+                                    st.write(f"**Öneri:** {bear.get('recommendation', 'BEKLE')}")
+                                    st.write(f"**Güven:** {bear.get('confidence', 0.5):.1%}")
+                                    st.write(f"**Özet:** {bear.get('summary', '')}")
+                                
+                                with st.expander("⚖️ Hakem (Referee) Detaylı Kararı", expanded=True):
+                                    decision = meeting.get('final_decision', {})
+                                    st.write(f"**Nihai Öneri:** {decision.get('final_recommendation', 'BEKLE')}")
+                                    st.write(f"**Güven:** {decision.get('confidence', 0.5):.1%}")
+                                    st.write(f"**Gerekçe:** {decision.get('reasoning', '')}")
+                                    st.write(f"**Özet:** {decision.get('summary', '')}")
+                else:
+                    st.info("ℹ️ Önce bir hisse analizi yapın, sonra yatırım kurulu toplantısını başlatabilirsiniz.")
+            except ImportError:
+                st.warning("⚠️ Yatırım kurulu modülü bulunamadı.")
+            except Exception as e:
+                st.error(f"❌ Yatırım kurulu hatası: {e}")
+                import traceback
+                st.code(traceback.format_exc())
             st.write("Hangi sektörler 'ucuz' veya 'pahalı' kaldı?")
             
             country = st.selectbox("Ülke", ["TR", "US"], index=0, key="rotation_country")
