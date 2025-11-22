@@ -16,13 +16,17 @@ import json
 import re
 warnings.filterwarnings('ignore')
 
+# Logging
+from src.logger_config import setup_logger
+logger = setup_logger(__name__)
+
 # Gemini API için
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    print("⚠️  google-generativeai paketi yüklü değil. Gemini API kullanılamayacak.")
+    logger.warning("google-generativeai paketi yüklü değil. Gemini API kullanılamayacak.")
 
 
 class SentimentAnalyzer:
@@ -41,7 +45,7 @@ class SentimentAnalyzer:
         use_gemini : bool
             Gemini API kullanılsın mı? (varsayılan: True)
         """
-        print("📥 Sentiment modelleri hazırlanıyor...")
+        logger.info("Sentiment modelleri hazırlanıyor...")
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.models = {}
@@ -53,9 +57,9 @@ class SentimentAnalyzer:
                 model="ProsusAI/finbert", 
                 device=0 if torch.cuda.is_available() else -1
             )
-            print("✅ FinBERT (EN) yüklendi.")
+            logger.info("✅ FinBERT (EN) yüklendi.")
         except Exception as e:
-            print(f"⚠️  FinBERT yüklenemedi: {e}")
+            logger.warning(f"FinBERT yüklenemedi: {e}")
             self.models['en'] = None
         
         # 2. Türkçe Model (Genel Sentiment)
@@ -65,9 +69,9 @@ class SentimentAnalyzer:
                 model="savasy/bert-base-turkish-sentiment-cased", 
                 device=0 if torch.cuda.is_available() else -1
             )
-            print("✅ BERT-Turkish (TR) yüklendi.")
+            logger.info("✅ BERT-Turkish (TR) yüklendi.")
         except Exception as e:
-            print(f"⚠️  Türkçe model yüklenemedi: {e}")
+            logger.warning(f"Türkçe model yüklenemedi: {e}")
             self.models['tr'] = None
         
         # Eski API uyumluluğu için
@@ -94,21 +98,21 @@ class SentimentAnalyzer:
                             # Test et
                             test_response = self.gemini_model.generate_content("Test")
                             if test_response and test_response.text:
-                                print(f"✅ Gemini API yüklendi: {model_name}")
+                                logger.info(f"✅ Gemini API yüklendi: {model_name}")
                                 break
                         except Exception as model_error:
-                            print(f"⚠️  {model_name} modeli çalışmadı: {model_error}")
+                            logger.debug(f"{model_name} modeli çalışmadı: {model_error}")
                             continue
                     
                     if self.gemini_model is None:
-                        print("⚠️  Hiçbir Gemini modeli çalışmadı. Gemini API kullanılamayacak.")
+                        logger.warning("Hiçbir Gemini modeli çalışmadı. Gemini API kullanılamayacak.")
                         self.use_gemini = False
                 else:
-                    print("⚠️  GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")
-                    print("   💡 Gemini API key'i almak için: https://makersuite.google.com/app/apikey")
+                    logger.warning("GEMINI_API_KEY bulunamadı. Gemini API kullanılamayacak.")
+                    logger.info("💡 Gemini API key'i almak için: https://makersuite.google.com/app/apikey")
                     self.use_gemini = False
             except Exception as e:
-                print(f"⚠️  Gemini API yüklenemedi: {e}")
+                logger.warning(f"Gemini API yüklenemedi: {e}")
                 self.use_gemini = False
     
     def analyze_sentiment(self, text: str) -> Dict:
@@ -212,7 +216,7 @@ class SentimentAnalyzer:
                     }
                 }
             except Exception as e:
-                print(f"⚠️  Türkçe model analiz hatası: {e}")
+                logger.warning(f"Türkçe model analiz hatası: {e}", exc_info=True)
         
         return rule_result
     
@@ -310,7 +314,7 @@ class SentimentAnalyzer:
             }
             
         except Exception as e:
-            print(f"⚠️  Model analizi hatası: {e}")
+            logger.warning(f"Model analizi hatası: {e}", exc_info=True)
             return self._analyze_with_rules(text)
     
     def _analyze_with_gemini(self, text: str) -> Optional[Dict]:
@@ -409,8 +413,8 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                     self._gemini_debug_count = 0
                 if self._gemini_debug_count < 3:
                     reason = result.get('reason', 'Belirtilmemiş')
-                    print(f"🤖 Gemini API kullanıldı: '{text[:50]}...' -> {class_name} (confidence: {confidence:.2f})")
-                    print(f"   💭 Neden: {reason}")
+                    logger.debug(f"Gemini API kullanıldı: '{text[:50]}...' -> {class_name} (confidence: {confidence:.2f})")
+                    logger.debug(f"   Neden: {reason}")
                     self._gemini_debug_count += 1
                 
                 return {
@@ -424,12 +428,12 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
                 }
                 
             except json.JSONDecodeError as e:
-                print(f"⚠️  Gemini API yanıtı parse edilemedi: {e}")
-                print(f"   Yanıt: {response_text[:200]}")
+                logger.warning(f"Gemini API yanıtı parse edilemedi: {e}")
+                logger.debug(f"   Yanıt: {response_text[:200]}")
                 return None
                 
         except Exception as e:
-            print(f"⚠️  Gemini API hatası: {e}")
+            logger.warning(f"Gemini API hatası: {e}", exc_info=True)
             return None
     
     def _analyze_with_rules(self, text: str) -> Dict:
@@ -755,7 +759,7 @@ SADECE JSON yanıt ver, başka hiçbir şey yazma."""
             }
             
         except Exception as e:
-            print(f"⚠️  Gemini context/sentiment analizi hatası: {e}")
+            logger.warning(f"Gemini context/sentiment analizi hatası: {e}", exc_info=True)
             # Fallback: Basit kural tabanlı
             return _classify_with_rules(title, content, company_name, ticker)
     else:
@@ -1015,7 +1019,7 @@ def analyze_stock_news(
     # Toplam skor
     hisse_duygu_skoru = aggregate_sentiment(stock_news_with_sentiment)
     
-    print(f"✅ Hisse bazlı haber analizi: {len(stock_news)} haber, Skor: {hisse_duygu_skoru:.2f}/100")
+    logger.info(f"✅ Hisse bazlı haber analizi: {len(stock_news)} haber, Skor: {hisse_duygu_skoru:.2f}/100")
     
     return hisse_duygu_skoru
 
@@ -1097,14 +1101,16 @@ def analyze_market_news(
     # Toplam skor
     piyasa_duygu_skoru = aggregate_sentiment(market_news_with_sentiment)
     
-    print(f"✅ Piyasa geneli haber analizi: {len(market_news)} haber, Skor: {piyasa_duygu_skoru:.2f}/100")
+    logger.info(f"✅ Piyasa geneli haber analizi: {len(market_news)} haber, Skor: {piyasa_duygu_skoru:.2f}/100")
     
     return piyasa_duygu_skoru
 
 
 if __name__ == "__main__":
     # Test
-    print("=== Sentiment Analizi Modülü Test ===\n")
+    test_header = "=== Sentiment Analizi Modülü Test ===\n"
+    logger.info(test_header)
+    print(test_header)  # CLI için print
     
     # Analyzer oluştur
     analyzer = SentimentAnalyzer()
@@ -1116,11 +1122,15 @@ if __name__ == "__main__":
         "Şirket normal seyrini sürdürüyor."
     ]
     
-    print("1. Tekil metin analizi:")
+    test_section = "1. Tekil metin analizi:"
+    logger.info(test_section)
+    print(test_section)  # CLI için print
+    
     for text in test_texts:
         result = analyzer.analyze_sentiment(text)
-        print(f"\nMetin: {text}")
-        print(f"Sonuç: {result}")
+        result_text = f"\nMetin: {text}\nSonuç: {result}"
+        logger.info(result_text)
+        print(result_text)  # CLI için print
     
     # Haber DataFrame testi
     print("\n\n2. Haber DataFrame analizi:")

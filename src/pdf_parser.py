@@ -35,7 +35,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 # Proje kök dizini
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 pdf_cache_dir = project_root / "data" / "pdf_cache"
 pdf_cache_dir.mkdir(parents=True, exist_ok=True)
 

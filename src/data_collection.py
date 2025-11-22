@@ -30,9 +30,17 @@ except ImportError:
 
 # .env dosyasından API key'leri yükle
 # Proje kök dizinini bul (.env dosyasının olduğu yer)
-project_root = Path(__file__).parent.parent.parent
+# DÜZELTME: parent.parent.parent yerine parent.parent (repo kökü)
+project_root = Path(__file__).parent.parent
 env_path = project_root / '.env'
 load_dotenv(dotenv_path=env_path)
+
+# .env dosyası kontrolü ve uyarı
+if not env_path.exists():
+    logger.warning(f".env dosyası bulunamadı: {env_path}")
+    logger.info("💡 .env dosyası oluşturmak için proje kök dizininde '.env' dosyası oluşturun.")
+else:
+    logger.debug(f".env dosyası yüklendi: {env_path}")
 
 
 def get_company_name(ticker: str) -> str:
@@ -127,8 +135,21 @@ def get_news(company_name: str, days_back: int = 30, api_key: Optional[str] = No
     # Eğer API key yoksa, dummy veri döndür (test amaçlı)
     # NOT: Üretimde bu yerine Exception fırlatılmalı, şimdilik backward compatibility için dummy data
     if api_key is None:
-        logger.warning("NEWS_API_KEY bulunamadı. Dummy (test) veri kullanılıyor.")
-        logger.info("Gerçek haberler için: https://newsapi.org/ adresinden ücretsiz API key alın")
+        error_msg = (
+            "⚠️  KRİTİK: NEWS_API_KEY bulunamadı!\n"
+            "   Gerçek haber verisi alınamayacak, dummy (test) veri kullanılıyor.\n"
+            "   💡 Çözüm:\n"
+            "   1. https://newsapi.org/ adresinden ücretsiz API key alın\n"
+            "   2. Proje kök dizininde .env dosyası oluşturun\n"
+            "   3. .env dosyasına şunu ekleyin: NEWS_API_KEY=your_api_key_here\n"
+            "   4. Uygulamayı yeniden başlatın"
+        )
+        logger.error(error_msg)
+        
+        # Üretim modu kontrolü (opsiyonel: env var ile kontrol edilebilir)
+        if os.getenv('REQUIRE_NEWS_API_KEY', 'false').lower() == 'true':
+            raise ValueError("NEWS_API_KEY zorunlu ancak bulunamadı. Lütfen .env dosyasına ekleyin.")
+        
         return _get_dummy_news(company_name, days_back)
     
     # NewsAPI'den haber çek

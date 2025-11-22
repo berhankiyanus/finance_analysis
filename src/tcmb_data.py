@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # .env dosyasından API key'leri yükle
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 env_path = project_root / '.env'
 load_dotenv(dotenv_path=env_path)
 

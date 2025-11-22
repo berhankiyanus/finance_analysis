@@ -45,6 +45,13 @@ from src.scoring import (
 from src.logger_config import setup_logger
 logger = setup_logger(__name__)
 
+# Yapılandırma doğrulama (opsiyonel: uygulama başlangıcında)
+from src.config_validator import validate_config_on_startup
+
+# Uygulama başlangıcında yapılandırmayı doğrula (sadece uyarı, exception fırlatmaz)
+# Zorunlu anahtarlar için REQUIRE_* env var'larını kullanın
+_ = validate_config_on_startup(raise_on_missing=False)
+
 
 def analyze_company(
     company_name: str,
@@ -78,7 +85,7 @@ def analyze_company(
         Tüm analiz sonuçları
     """
     
-    print(f"\n{'='*60}")
+    logger.info(f"\n{'='*60}")
     logger.info(f"{company_name} ({ticker}) ANALİZİ BAŞLIYOR...")
     
     # 1. VERİ TOPLAMA
@@ -95,26 +102,38 @@ def analyze_company(
     # Finansal göstergeler (opsiyonel)
     fundamentals = None
     if use_fundamentals:
-        print("   📊 Finansal göstergeler çekiliyor...")
+        logger.info("Finansal göstergeler çekiliyor...")
         fundamentals = get_fundamentals(ticker)
     
     # Makroekonomik veriler (opsiyonel)
     macro_data = None
     try:
-        print("   🌍 Makroekonomik veriler çekiliyor...")
-        # Ticker'dan ülke kodu çıkar (basit yaklaşım)
-        country = "TR" if ".IS" in ticker or ticker.endswith(".IS") else "US"
+        logger.info("Makroekonomik veriler çekiliyor...")
+        # Ülke tespiti (geliştirilmiş)
+        from src.country_detector import detect_country_from_ticker, get_country_name
+        country = detect_country_from_ticker(ticker)
+        country_name = get_country_name(country)
+        logger.info(f"Ticker '{ticker}' → Ülke: {country} ({country_name})")
+        
         macro_data = get_macroeconomic_data(country=country)
+        
+        if macro_data:
+            logger.info(f"✅ {country_name} için {len(macro_data) if isinstance(macro_data, dict) else 'N/A'} makro gösterge bulundu.")
+        else:
+            logger.warning(f"⚠️  {country_name} için makro veri bulunamadı.")
     except Exception as e:
-        print(f"   ⚠️  Makroekonomik veri çekilemedi: {e}")
+        logger.error(f"Makroekonomik veri çekilirken hata (ülke: {country if 'country' in locals() else 'bilinmiyor'}): {e}", exc_info=True)
         macro_data = None
     
-    print("✅ Veri toplama tamamlandı.\n")
+    logger.info("✅ Veri toplama tamamlandı.\n")
     
     # 2. SENTIMENT ANALİZİ
-    print("🤖 2. Sentiment analizi yapılıyor...")
+    logger.info("2. Sentiment analizi yapılıyor...")
     
-    analyzer = SentimentAnalyzer()
+    # Model cache kullan (singleton pattern)
+    from src.model_cache import get_sentiment_analyzer
+    analyzer = get_sentiment_analyzer(use_gemini=True)
+    
     news_df_with_sentiment = analyze_news_sentiment(
         news_df, 
         analyzer, 
@@ -154,11 +173,12 @@ def analyze_company(
                         top_k=3
                     )
                     if historical_context:
-                        print(f"✅ Tarihsel hafızadan {len(historical_context.split('GEÇMİŞTE BENZER OLAYLAR')) - 1} benzer olay bulundu.")
+                        event_count = len(historical_context.split('GEÇMİŞTE BENZER OLAYLAR')) - 1
+                        logger.info(f"✅ Tarihsel hafızadan {event_count} benzer olay bulundu.")
     except ImportError:
-        print("⚠️  Political classifier veya vector memory modülü bulunamadı.")
+        logger.warning("Political classifier veya vector memory modülü bulunamadı.")
     except Exception as e:
-        print(f"⚠️  Siyasi analiz/RAG hatası: {e}")
+        logger.warning(f"Siyasi analiz/RAG hatası: {e}", exc_info=True)
     
     # Hisse bazlı ve piyasa geneli sentiment skorları (yeni özellik)
     try:
@@ -169,7 +189,7 @@ def analyze_company(
             ticker=ticker
         )
     except Exception as e:
-        print(f"⚠️  Hisse bazlı sentiment analizi hatası: {e}")
+        logger.warning(f"Hisse bazlı sentiment analizi hatası: {e}", exc_info=True)
         hisse_duygu_skoru = sentiment_score  # Fallback
     
     try:
@@ -178,16 +198,16 @@ def analyze_company(
             analyzer=analyzer
         )
     except Exception as e:
-        print(f"⚠️  Piyasa geneli sentiment analizi hatası: {e}")
+        logger.warning(f"Piyasa geneli sentiment analizi hatası: {e}", exc_info=True)
         piyasa_duygu_skoru = 50.0  # Fallback (nötr)
     
-    print(f"✅ Sentiment analizi tamamlandı.")
-    print(f"   • Genel Sentiment Skoru: {sentiment_score:.2f}/100")
-    print(f"   • Hisse Bazlı Duygu Skoru: {hisse_duygu_skoru:.2f}/100")
-    print(f"   • Piyasa Geneli Duygu Skoru: {piyasa_duygu_skoru:.2f}/100\n")
+    logger.info(f"✅ Sentiment analizi tamamlandı.")
+    logger.info(f"   • Genel Sentiment Skoru: {sentiment_score:.2f}/100")
+    logger.info(f"   • Hisse Bazlı Duygu Skoru: {hisse_duygu_skoru:.2f}/100")
+    logger.info(f"   • Piyasa Geneli Duygu Skoru: {piyasa_duygu_skoru:.2f}/100\n")
     
     # 3. FİNANSAL ANALİZ
-    print("📈 3. Finansal analiz yapılıyor...")
+    logger.info("📈 3. Finansal analiz yapılıyor...")
     
     # Hisse ve piyasa duygu skorlarını Series'e çevir (feature'lar için)
     # Her gün için aynı skoru kullan (basit yaklaşım)
@@ -208,10 +228,10 @@ def analyze_company(
     # Finansal skor
     financial_score = compute_financial_score(feature_vector)
     
-    print(f"✅ Finansal analiz tamamlandı. Skor: {financial_score:.2f}/100\n")
+    logger.info(f"✅ Finansal analiz tamamlandı. Skor: {financial_score:.2f}/100\n")
     
     # 4. SKORLAMA
-    print("🎯 4. Genel durum skoru hesaplanıyor...")
+    logger.info("🎯 4. Genel durum skoru hesaplanıyor...")
     
     overall_score = compute_overall_score(
         sentiment_score,
@@ -229,24 +249,24 @@ def analyze_company(
     else:
         price_change_30d = None
     
-    print(f"✅ Genel durum skoru: {overall_score:.2f}/100\n")
+    logger.info(f"✅ Genel durum skoru: {overall_score:.2f}/100\n")
     
     # 5. YÖN TAHMİNİ (OPSİYONEL)
-    print("🔮 5. Yön tahmini yapılıyor...")
+    logger.info("🔮 5. Yön tahmini yapılıyor...")
     
     # Eğitilmiş model varsa kullan
     model_path = f"models/price_predictor_{ticker.lower().replace('.', '_')}.pkl"
     if os.path.exists(model_path):
         direction_prediction = predict_direction(feature_vector, model_path=model_path)
-        print(f"✅ ML Model Tahmini: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
+        logger.info(f"✅ ML Model Tahmini: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
     else:
         # Basit kural tabanlı tahmin
         direction_prediction = predict_direction(feature_vector)
-        print(f"✅ Kural Tabanlı Tahmin: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
-        print(f"   💡 İpucu: Daha iyi tahmin için model eğitin: python3 train_model.py {ticker}")
+        logger.info(f"✅ Kural Tabanlı Tahmin: {direction_prediction['direction']} ({direction_prediction['confidence']:.2%} güven)\n")
+        logger.info(f"   💡 İpucu: Daha iyi tahmin için model eğitin: python3 train_model.py {ticker}")
     
     # 6. RAPOR OLUŞTURMA
-    print("📝 6. Rapor oluşturuluyor...\n")
+    logger.info("📝 6. Rapor oluşturuluyor...\n")
     
     summary = generate_turkish_summary(
         company_name=company_name,
@@ -306,7 +326,7 @@ def main():
     
     # Örnek kullanım
     if len(sys.argv) < 3:
-        print("""
+        logger.info("""
 Kullanım:
     python -m src.main <şirket_adı> <ticker> [days_back] [sentiment_weight] [financial_weight]
 
@@ -340,31 +360,38 @@ Parametreler:
             financial_weight=financial_weight
         )
         
-        # Raporu yazdır
-        print(results['summary'])
+        # Raporu yazdır (hem logger hem print - CLI için)
+        summary = results['summary']
+        logger.info(summary)
+        print(summary)  # CLI için print kullan
         
         # Ek bilgiler
-        print("\n📊 DETAYLI BİLGİLER")
-        print(f"   • Analiz edilen haber sayısı: {results['news_count']}")
-        print(f"   • Fiyat verisi gün sayısı: {len(results['price_df'])}")
+        details = "\n📊 DETAYLI BİLGİLER"
+        details += f"\n   • Analiz edilen haber sayısı: {results['news_count']}"
+        details += f"\n   • Fiyat verisi gün sayısı: {len(results['price_df'])}"
         
         if results['fundamentals']:
-            print(f"   • Finansal gösterge sayısı: {len(results['fundamentals'])}")
+            details += f"\n   • Finansal gösterge sayısı: {len(results['fundamentals'])}"
         
-        print(f"\n   • Yön tahmini: {results['direction_prediction']['direction']}")
-        print(f"   • Tahmin nedeni: {results['direction_prediction']['reason']}")
+        details += f"\n\n   • Yön tahmini: {results['direction_prediction']['direction']}"
+        details += f"\n   • Tahmin nedeni: {results['direction_prediction']['reason']}"
         
         # Haber özeti
         if not results['news_df'].empty:
-            print("\n📰 HABER ÖZETİ (İlk 5 haber):")
+            details += "\n\n📰 HABER ÖZETİ (İlk 5 haber):"
             for idx, row in results['news_df'].head(5).iterrows():
                 sentiment_emoji = "🟢" if row['sentiment_class'] == 'positive' else \
                                  "🔴" if row['sentiment_class'] == 'negative' else "🟡"
-                print(f"   {sentiment_emoji} {row['title'][:60]}...")
-                print(f"      Sentiment: {row['sentiment_class']} ({row['sentiment_confidence']:.2%})")
+                details += f"\n   {sentiment_emoji} {row['title'][:60]}..."
+                details += f"\n      Sentiment: {row['sentiment_class']} ({row['sentiment_confidence']:.2%})"
+        
+        logger.info(details)
+        print(details)  # CLI için print kullan
         
     except Exception as e:
-        print(f"\n❌ Hata oluştu: {e}")
+        error_msg = f"\n❌ Hata oluştu: {e}"
+        logger.error(error_msg, exc_info=True)
+        print(error_msg)  # CLI için print kullan
         import traceback
         traceback.print_exc()
         sys.exit(1)

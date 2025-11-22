@@ -25,7 +25,7 @@ except ImportError:
     print("   💡 Yüklemek için: pip install sentence-transformers")
 
 # Proje kök dizini
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 vector_db_path = project_root / "data" / "vector_db"
 
 

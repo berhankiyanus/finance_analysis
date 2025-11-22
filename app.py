@@ -60,11 +60,30 @@ GEMINI_API_KEY = load_api_key_from_streamlit_or_env(
 if not GEMINI_API_KEY:
     st.sidebar.info("   💡 Daha iyi sentiment analizi için Gemini API key ekleyin: https://makersuite.google.com/app/apikey")
 
+# Yapılandırma doğrulama (Streamlit başlangıcında)
+try:
+    from src.config_validator import ConfigValidator, validate_config_on_startup
+    # Uygulama başlangıcında yapılandırmayı kontrol et
+    config_valid, config_results = validate_config_on_startup(raise_on_missing=False)
+    if not config_valid or config_results.get('missing_optional'):
+        # Sidebar'da yapılandırma durumunu göster
+        with st.sidebar.expander("⚙️ Yapılandırma Durumu", expanded=False):
+            st.markdown(ConfigValidator.get_config_summary())
+except ImportError:
+    pass  # Config validator yoksa sessizce devam et
+
 # Ana modülleri import et (try-except ile güvenli import)
 try:
     from src.main import analyze_company
     from src.prediction_model import train_price_direction_model, PriceDirectionPredictor
     from src.data_collection import get_price_data, get_fundamentals
+    # Yeni haber kaynağı modülü (fallback desteği ile)
+    try:
+        from src.news_sources import get_news_from_all_sources
+        USE_MULTI_SOURCE_NEWS = True
+    except ImportError:
+        from src.data_collection import get_news
+        USE_MULTI_SOURCE_NEWS = False
 except ImportError as e:
     # Streamlit Cloud için fallback import
     import importlib.util
@@ -138,15 +157,29 @@ def cached_get_price_data(ticker: str, period: str = "1y"):
 @st.cache_data(ttl=1800)  # 30 dakika cache - haber verisi
 def cached_get_news(company_name: str, days_back: int = 30, ticker=None):
     """
-    Cache'lenmiş haber verisi çekme - NewsAPI ve RSS Feed'den.
+    Cache'lenmiş haber verisi çekme - Çoklu kaynak desteği ile.
     
     @st.cache_data kullanıyoruz çünkü:
     - Sonuçlar DataFrame (serializable)
     - TTL (Time To Live) = 1800 saniye (30 dakika)
     - Aynı parametreler için cache'den döner
+    
+    Yeni: Çoklu haber kaynağı desteği (NewsAPI, Yahoo RSS, FMP, Finnhub)
     """
-    from src.data_collection import get_news
-    return get_news(company_name, days_back=days_back, ticker=ticker)
+    # Çoklu kaynak sistemi (fallback desteği ile)
+    try:
+        from src.news_sources import get_news_from_all_sources
+        return get_news_from_all_sources(
+            company_name=company_name,
+            ticker=ticker,
+            days_back=days_back,
+            max_articles=50
+        )
+    except Exception as e:
+        # Fallback: Eski sistem (sadece NewsAPI)
+        st.warning(f"⚠️ Çoklu haber kaynağı hatası, eski sisteme dönülüyor: {e}")
+        from src.data_collection import get_news
+        return get_news(company_name, days_back=days_back, api_key=NEWS_API_KEY, ticker=ticker)
 
 @st.cache_resource  # Model yükleme cache'i - uygulama çalıştığı sürece cache'de kalır
 def load_predictor_model(model_path: str):
